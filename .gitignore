@@ -12,6 +12,8 @@ coverage/
 # Tauri / Rust
 target/
 Cargo.lock
+!apps/desktop/src-tauri/Cargo.lock
+apps/desktop/src-tauri/gen/
 
 # Atria local workspace data
 .atria-runtime/
