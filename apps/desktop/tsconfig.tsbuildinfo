@@ -1,1 +1,0 @@
-{"root":["./src/main.tsx","./src/app/app.tsx","./src/app/store.ts","./src/app/workspaceclient.ts","./src/components/artifactpreview.tsx","./src/components/blockrenderer.tsx","./src/components/filetree.tsx","./src/components/pageeditor.tsx","./src/components/richtextblock.tsx","./vite.config.ts"],"version":"5.9.3"}

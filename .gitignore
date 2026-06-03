@@ -7,6 +7,7 @@ dist-ssr/
 *.local
 *.log
 coverage/
+*.tsbuildinfo
 
 # Tauri / Rust
 target/
@@ -15,4 +16,3 @@ Cargo.lock
 # Atria local workspace data
 .atria-runtime/
 workspace/
-
