@@ -6,6 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use tauri::tray::TrayIconBuilder;
 
 #[derive(Serialize)]
 struct WorkspaceEntry {
@@ -183,6 +184,15 @@ fn atria_write_data_url(root_path: Option<String>, relative_path: String, data_u
 
 fn main() {
   tauri::Builder::default()
+    .setup(|app| {
+      if let Some(icon) = app.default_window_icon().cloned() {
+        TrayIconBuilder::new()
+          .icon(icon)
+          .tooltip("Atria")
+          .build(app)?;
+      }
+      Ok(())
+    })
     .invoke_handler(tauri::generate_handler![
       atria_default_workspace_path,
       atria_read_workspace,
