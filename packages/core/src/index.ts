@@ -38,11 +38,11 @@ export function createBlock(type: AtriaBlock["type"], patch: Partial<AtriaBlock>
   const base = { id, source: "human" as const, createdAt: nowIso(), updatedAt: nowIso() };
   const defaults: Record<AtriaBlock["type"], AtriaBlock> = {
     heading: { ...base, type: "heading", level: 2, text: "New heading" },
-    text: { ...base, type: "text", richText: "" },
+    text: { ...base, type: "text", richText: "<p></p>" },
     callout: { ...base, type: "callout", tone: "info", title: "Note", text: "" },
     todo: { ...base, type: "todo", checked: false, text: "Todo" },
     card: { ...base, type: "card", title: "", text: "" },
-    code: { ...base, type: "code", language: "typescript", code: "" },
+    code: { ...base, type: "code", language: "text", code: "" },
     image: { ...base, type: "image", src: "", caption: "", width: 640 },
     artifact: { ...base, type: "artifact", artifactId: "", note: "", height: 420, collapsed: false },
     divider: { ...base, type: "divider" },
@@ -99,29 +99,42 @@ export function createDefaultWorkspace(): WorkspaceSnapshot {
 
   const reviewPage: Page = PageSchema.parse({
     id: "experiment-review-2026-05-28",
-    title: "实验设计与评估思路",
+    title: "5月28日结果整理",
     kind: "note",
     projectId: "archaicseeker",
-    tags: ["review", "benchmark"],
+    tags: ["review", "benchmark", "artifact"],
+    body: "",
     createdAt,
     updatedAt: createdAt,
     blocks: [
-      createBlock("heading", { text: "实验设计与评估思路" }),
+      createBlock("heading", { level: 1, text: "5月28日结果整理" }),
       createBlock("text", {
         richText:
-          "本页整理本轮实验的目标、数据、评估指标与对比方案，确保结果可复现、可解释、可追溯。",
+          "<p>今天主要整理 ArchaicSeeker modern reference benchmark 的关键结果，并把 AI 生成的 HTML 报告嵌入到人工复盘页面中。</p>",
       }),
       createBlock("callout", {
-        title: "要点",
-        text: "优先保证数据划分一致性与评估脚本可复用性，避免一次性脚本导致结果不可比较。",
+        title: "AI 报告提示",
+        text: "AI 生成报告显示 modern reference 在多数指标上收益明显，但部分样本存在边界情况，需要人工复查。",
       }),
-      createBlock("todo", { text: "确定数据划分策略（即时倒排分）", checked: true }),
-      createBlock("todo", { text: "确定评估指标与输出（MRR@10、NDCG@10、F1）", checked: false }),
+      createBlock("card", {
+        title: "核心判断 / Modern Reference 边际收益递减",
+        text: "Recall@10 与 NDCG@10 继续提升，但 EM 改善有限。下一轮应重点检查检索命中后答案抽取失败的样本。",
+      }),
+      createBlock("todo", { text: "检查异常样本并标注失败原因", checked: true }),
+      createBlock("todo", { text: "补充 reranker / prompt 参数对照实验", checked: false }),
       createBlock("code", {
-        language: "python",
-        code: "def ndcg_at_k(relevance, k):\n    dcg = sum(rel / math.log2(i + 2) for i, rel in enumerate(relevance[:k]))\n    return dcg",
+        language: "bash",
+        code: "python scripts/evaluate.py --dataset modern-reference --top-k 10 --report html",
       }),
-      createBlock("metric-card", { label: "MRR@10", value: "0.634", delta: "+9.4%" }),
+      createBlock("artifact", {
+        artifactId: artifact.id,
+        note: "AI-generated HTML report，作为本轮结果的可视化原始依据。",
+        height: 420,
+      }),
+      createBlock("text", {
+        richText:
+          "<p>人工总结：先保留 modern reference 方案作为默认候选，同时把边界样本整理成下一轮实验清单。</p>",
+      }),
     ],
   });
 
@@ -130,23 +143,29 @@ export function createDefaultWorkspace(): WorkspaceSnapshot {
     title: "2026-05-28 实验复盘与结论",
     kind: "timeline",
     timelineRef: "2026-05-28",
-    tags: ["daily", "summary"],
+    projectId: "archaicseeker",
+    tags: ["daily", "summary", "html"],
+    body: "",
     createdAt,
     updatedAt: createdAt,
     blocks: [
-      createBlock("heading", { text: "2026-05-28 实验复盘与结论" }),
+      createBlock("heading", { level: 1, text: "2026-05-28 实验复盘与结论" }),
       createBlock("text", {
         richText:
-          "对本轮实验结果进行复盘，重点分析指标变化、误差来源与下一步改进方向。",
+          "<p>对本轮实验结果进行复盘，重点分析指标变化、误差来源与下一步改进方向。</p>",
       }),
       createBlock("artifact", {
-        artifactId: "modern-reference-report",
-        note: "嵌入的 HTML 结果用于对照指标与趋势。",
+        artifactId: artifact.id,
+        note: "嵌入 HTML 结果，用于对照指标和趋势。",
         height: 360,
       }),
       createBlock("callout", {
         title: "关键发现",
-        text: "NDCG@10 提升明显，主要受益于重排策略的改进；EM 的提升仍然有限。",
+        text: "NDCG@10 提升明显，主要受益于重排策略；EM 的提升仍然有限。",
+      }),
+      createBlock("text", {
+        richText:
+          "<p>下一步：把失败样本拆成检索失败、证据不足、生成偏差三类，再分别设计修正实验。</p>",
       }),
     ],
   });
@@ -246,11 +265,12 @@ export class WorkspaceService {
       title: input.title,
       source: "human",
       kind: input.kind ?? "note",
+      body: input.body ?? "",
+      filePath: input.filePath,
       projectId: input.projectId,
       timelineRef: input.timelineRef,
       tags: input.tags ?? [],
-      body: input.body ?? "",
-      blocks: input.blocks ?? [],
+      blocks: input.blocks ?? [createBlock("text", { richText: "<p></p>" })],
       createdAt,
       updatedAt: createdAt,
     });
@@ -312,6 +332,7 @@ export class WorkspaceService {
       kind: input.kind ?? "html",
       entryFile: input.entryFile ?? "index.html",
       entryUrl: input.entryUrl,
+      filePath: input.filePath,
       projectId: input.projectId,
       taskId: input.taskId,
       timelineRefs: input.timelineRefs ?? [],
@@ -322,10 +343,7 @@ export class WorkspaceService {
       createdAt,
       updatedAt: createdAt,
     });
-    snapshot.artifacts = [
-      ...snapshot.artifacts.filter((item) => item.id !== artifact.id),
-      artifact,
-    ];
+    snapshot.artifacts = [...snapshot.artifacts.filter((item) => item.id !== artifact.id), artifact];
     snapshot.tree = [
       ...snapshot.tree.filter((item) => !(item.type === "artifact" && item.id === artifact.id)),
       { id: artifact.id, type: "artifact", parentId: "html-results", order: Date.now() },
@@ -361,7 +379,7 @@ export class WorkspaceService {
       tags: [kind, "summary"],
       blocks: [
         createBlock("heading", { text: title ?? `${dateRef} Summary` }),
-        createBlock("text", { richText: "" }),
+        createBlock("text", { richText: "<p></p>" }),
       ],
     });
     const snapshot = await this.repository.read();

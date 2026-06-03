@@ -9,10 +9,12 @@ import {
   FileText,
   GitBranch,
   Hash,
+  Heading1,
   Image,
   Info,
   Minus,
   PanelTop,
+  Pilcrow,
   Quote,
   Search,
   Settings,
@@ -41,6 +43,8 @@ const blockPalette: Array<{
   label: string;
   icon: React.ComponentType<{ size?: number }>;
 }> = [
+  { type: "heading", label: "Heading", icon: Heading1 },
+  { type: "text", label: "Text", icon: Pilcrow },
   { type: "callout", label: "Callout", icon: Info },
   { type: "todo", label: "Todo", icon: CheckSquare },
   { type: "card", label: "Card", icon: PanelTop },

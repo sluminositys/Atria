@@ -9,7 +9,7 @@ import {
   WorkspaceSnapshotSchema,
   WorkspaceTreeItem,
 } from "@atria/schema";
-import { createDefaultWorkspace, nowIso, slugify } from "@atria/core";
+import { createBlock, createDefaultWorkspace, nowIso, slugify } from "@atria/core";
 
 interface WorkspaceEntry {
   name: string;
@@ -150,11 +150,9 @@ function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
       path: folderPaths[folder.id],
     })),
     pages: seed.pages.map((page) =>
-      PageSchema.parse({
+      normalizePageContent({
         ...page,
-        body: bodyFromLegacyBlocks(page),
         filePath: pagePaths[page.id] ?? `Notes/${slugify(page.title, "note")}${PAGE_EXTENSION}`,
-        blocks: page.blocks.filter((block) => block.type !== "heading" && block.type !== "text"),
       }),
     ),
     artifacts: seed.artifacts.map((artifact) =>
@@ -236,12 +234,10 @@ async function hydrateWorkspace(
         relativePath: entry.relative_path,
       });
       const parsed = PageSchema.parse(JSON.parse(content));
-      return PageSchema.parse({
+      return normalizePageContent({
         ...parsed,
         source: "human",
         filePath: entry.relative_path,
-        body: parsed.body || bodyFromLegacyBlocks(parsed),
-        blocks: parsed.blocks.filter((block) => block.type !== "heading" && block.type !== "text"),
       });
     }),
   );
@@ -305,12 +301,28 @@ async function hydrateWorkspace(
   });
 }
 
-function bodyFromLegacyBlocks(page: Page): string {
-  return page.blocks
-    .filter((block) => block.type === "text")
-    .map((block) => block.richText)
-    .filter(Boolean)
-    .join("\n");
+function normalizePageContent(page: Page): Page {
+  const legacyBody = (page.body ?? "").trim();
+  const hasLegacyBody = legacyBody && legacyBody !== "<p></p>";
+
+  if (page.blocks.length > 0) {
+    const hasSameText = page.blocks.some(
+      (block) => block.type === "text" && block.richText.trim() === legacyBody,
+    );
+    return PageSchema.parse({
+      ...page,
+      body: "",
+      blocks: hasLegacyBody && !hasSameText
+        ? [createBlock("text", { richText: page.body }), ...page.blocks]
+        : page.blocks,
+    });
+  }
+
+  return PageSchema.parse({
+    ...page,
+    body: "",
+    blocks: [createBlock("text", { richText: hasLegacyBody ? page.body : "<p></p>" })],
+  });
 }
 
 function cleanPathSegment(input: string): string {

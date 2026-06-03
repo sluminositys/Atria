@@ -33,6 +33,7 @@ export const ArtifactCreateInputSchema = ArtifactSchema.omit({
   kind: true,
   entryFile: true,
   entryUrl: true,
+  filePath: true,
   timelineRefs: true,
   tags: true,
   metrics: true,

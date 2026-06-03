@@ -264,7 +264,7 @@
 }
 
 .page {
-  width: min(760px, calc(100% - 112px));
+  width: min(760px, calc(100% - 96px));
   min-height: 100%;
   margin: 0 auto;
   padding: 52px 0 96px;
@@ -272,83 +272,80 @@
 
 .pageTitle {
   width: 100%;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   border: 0;
-  color: var(--atria-ink);
-  font-size: 34px;
-  font-weight: 760;
+  background: transparent;
+  color: #37352f;
+  font-size: 38px;
+  font-weight: 720;
   line-height: 1.2;
   outline: none;
 }
 
-.pageMeta {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 72px;
-  gap: 8px;
+.pageMetaCompact {
+  display: flex;
   align-items: center;
-  margin-bottom: 28px;
+  gap: 10px;
+  margin-bottom: 26px;
   color: var(--atria-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.pageMeta input {
+.pageMetaCompact span {
+  color: var(--atria-faint);
+  text-transform: uppercase;
+}
+
+.pageMetaCompact input {
   min-width: 0;
+  flex: 1;
   height: 28px;
   border: 0;
   border-radius: var(--atria-radius);
   background: transparent;
-  color: var(--atria-muted);
+  color: var(--atria-faint);
   outline: none;
 }
 
-.pageMeta input:hover,
-.pageMeta input:focus {
+.pageMetaCompact input:hover,
+.pageMetaCompact input:focus {
   background: #f5f5f4;
 }
 
-.pageMeta button {
-  height: 26px;
-  border: 0;
-  border-radius: var(--atria-radius);
-  background: transparent;
-  color: var(--atria-faint);
-}
-
-.pageMeta button:hover {
-  background: var(--atria-hover);
-  color: #9f1239;
-}
-
-.pageBody {
-  min-height: 240px;
-  margin-bottom: 18px;
-}
-
-.blocks {
+.blockCanvas {
   display: grid;
-  gap: 8px;
+  gap: 2px;
 }
 
-.blockShell {
+.blockFrame,
+.blockFrameActive {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 6px;
   align-items: start;
+  margin-left: -36px;
+  padding: 2px 0;
+  border-radius: var(--atria-radius);
 }
 
-.blockControls {
-  display: grid;
-  grid-template-columns: 18px;
+.blockFrameActive {
+  background: linear-gradient(90deg, rgb(47 128 237 / 4%), transparent 58%);
+}
+
+.blockGutter {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.blockShell:hover .blockControls {
+.blockFrame:hover .blockGutter,
+.blockFrameActive .blockGutter {
   opacity: 1;
 }
 
-.blockControls button {
+.blockGutter button {
   width: 20px;
   height: 20px;
   display: grid;
@@ -359,32 +356,54 @@
   color: var(--atria-faint);
 }
 
-.blockControls button:hover {
+.blockGutter button:hover {
   background: var(--atria-hover);
   color: var(--atria-ink);
 }
 
+.blockGutter button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.headingBlockWrap {
+  position: relative;
+}
+
 .headingBlock {
   width: 100%;
-  margin: 18px 0 6px;
+  margin: 14px 0 4px;
   border: 0;
+  background: transparent;
   color: var(--atria-ink);
-  font-size: 24px;
-  font-weight: 720;
+  font-weight: 700;
   line-height: 1.32;
   outline: none;
 }
 
+.headingLevelSelect {
+  position: absolute;
+  left: -48px;
+  top: 16px;
+  width: 38px;
+  height: 24px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-faint);
+  font-size: 11px;
+}
+
 .tiptapSurface {
-  min-height: 240px;
+  min-height: 28px;
   color: #344054;
   font-size: 16px;
-  line-height: 1.78;
+  line-height: 1.65;
   outline: none;
 }
 
 .tiptapSurface p {
-  margin: 0 0 0.9em;
+  margin: 0;
 }
 
 .tiptapSurface h1,
@@ -401,9 +420,9 @@
   grid-template-columns: 1fr;
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid #9ec5fe;
+  border: 1px solid #d7dce2;
   border-radius: var(--atria-radius);
-  background: var(--atria-blue-soft);
+  background: #f7fafc;
 }
 
 .calloutBlock input,
@@ -464,7 +483,7 @@
 .metricBlock {
   display: grid;
   gap: 6px;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--atria-line);
   border-radius: var(--atria-radius);
   background: #fbfbfa;
@@ -545,6 +564,29 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 78px;
   gap: 8px;
+}
+
+.artifactEmbedTitle {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--atria-ink);
+}
+
+.artifactEmbedTitle strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifactEmbedTitle small {
+  color: var(--atria-faint);
+  font-size: 11px;
 }
 
 .artifactEmbed iframe,

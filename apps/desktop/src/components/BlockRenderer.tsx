@@ -3,14 +3,21 @@ import { useEffect, useMemo, useState } from "react";
 import katex from "katex";
 import mermaid from "mermaid";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Artifact, AtriaBlock } from "@atria/schema";
+import { Artifact, AtriaBlock, AtriaBlockType } from "@atria/schema";
 import { toFileAssetUrl } from "../app/workspaceClient";
+import { RichTextBlock } from "./RichTextBlock";
 import styles from "../app/App.module.css";
 import "katex/dist/katex.min.css";
 
 interface BlockRendererProps {
+  pageId: string;
   block: AtriaBlock;
+  active: boolean;
   artifacts: Artifact[];
+  onEnterText(): void;
+  onBackspaceText(): void;
+  onSlashCommand(type: AtriaBlockType): void;
+  onPasteImage(dataUrl: string): void;
   onChange(patch: Partial<AtriaBlock>): void;
 }
 
@@ -21,8 +28,55 @@ type CanvasElement = {
   text: string;
 };
 
-export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps) {
-  if (block.type === "heading" || block.type === "text") return null;
+export function BlockRenderer({
+  block,
+  active,
+  artifacts,
+  onEnterText,
+  onBackspaceText,
+  onSlashCommand,
+  onPasteImage,
+  onChange,
+}: BlockRendererProps) {
+  if (block.type === "heading") {
+    return (
+      <div className={styles.headingBlockWrap}>
+        {active && (
+          <select
+            className={styles.headingLevelSelect}
+            value={block.level}
+            onChange={(event) => onChange({ level: Number(event.target.value) })}
+          >
+            <option value={1}>H1</option>
+            <option value={2}>H2</option>
+            <option value={3}>H3</option>
+            <option value={4}>H4</option>
+          </select>
+        )}
+        <input
+          className={styles.headingBlock}
+          style={{ fontSize: block.level === 1 ? 30 : block.level === 2 ? 24 : block.level === 3 ? 20 : 17 }}
+          value={block.text}
+          placeholder="Heading"
+          onChange={(event) => onChange({ text: event.target.value })}
+        />
+      </div>
+    );
+  }
+
+  if (block.type === "text") {
+    return (
+      <RichTextBlock
+        value={block.richText}
+        active={active}
+        onChange={(richText) => onChange({ richText })}
+        onEnter={onEnterText}
+        onBackspaceEmpty={onBackspaceText}
+        onSlashCommand={onSlashCommand}
+        onPasteImage={onPasteImage}
+      />
+    );
+  }
 
   if (block.type === "callout") {
     return (
@@ -72,6 +126,10 @@ export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps
     const artifact = artifacts.find((item) => item.id === block.artifactId) ?? artifacts[0];
     return (
       <div className={styles.artifactEmbed}>
+        <div className={styles.artifactEmbedTitle}>
+          <strong>{artifact?.title ?? "HTML artifact"}</strong>
+          <small>AI-created artifact</small>
+        </div>
         <div className={styles.embedHeader}>
           <select value={artifact?.id ?? ""} onChange={(event) => onChange({ artifactId: event.target.value })}>
             {artifacts.map((item) => (
