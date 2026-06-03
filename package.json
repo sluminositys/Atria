@@ -5,12 +5,12 @@
   "packageManager": "pnpm@9.15.4",
   "description": "A desktop-first HTML artifact workspace for AI-generated reports, block notes, and MCP-native agent integration.",
   "scripts": {
-    "dev": "pnpm --filter @atria/desktop dev",
-    "desktop": "pnpm --filter @atria/desktop tauri:dev",
-    "build": "pnpm -r --sort build",
-    "typecheck": "pnpm -r --sort typecheck",
-    "test": "pnpm -r --if-present test",
-    "mcp": "pnpm --filter @atria/mcp-server dev"
+    "dev": "corepack pnpm --filter @atria/desktop dev",
+    "desktop": "corepack pnpm --filter @atria/desktop tauri:dev",
+    "build": "corepack pnpm -r --sort build",
+    "typecheck": "corepack pnpm -r --sort typecheck",
+    "test": "corepack pnpm -r --if-present test",
+    "mcp": "corepack pnpm --filter @atria/mcp-server dev"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
@@ -18,4 +18,3 @@
     "vitest": "^3.2.2"
   }
 }
-

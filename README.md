@@ -33,12 +33,11 @@ workspace/
 ## Commands
 
 ```bash
-pnpm install
-pnpm dev
-pnpm build
-pnpm test
-pnpm mcp
+corepack pnpm install
+corepack pnpm dev
+corepack pnpm build
+corepack pnpm test
+corepack pnpm mcp
 ```
 
 Rust is required for the final Tauri desktop build. The renderer and TypeScript packages can be developed and verified independently with Node.js.
-
