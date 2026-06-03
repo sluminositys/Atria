@@ -2,6 +2,7 @@ import {
   Artifact,
   ArtifactCreateInput,
   ArtifactSchema,
+  AtriaDocumentContent,
   AtriaBlock,
   Page,
   PageCreateInput,
@@ -31,6 +32,13 @@ export function slugify(input: string, fallback = "item"): string {
     .replace(/(^[.-]+|[.-]+$)/g, "")
     .slice(0, 80);
   return slug || `${fallback}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+export function createEmptyDocument(): AtriaDocumentContent {
+  return {
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  };
 }
 
 export function createBlock(type: AtriaBlock["type"], patch: Partial<AtriaBlock> = {}): AtriaBlock {
@@ -265,12 +273,13 @@ export class WorkspaceService {
       title: input.title,
       source: "human",
       kind: input.kind ?? "note",
+      content: input.content ?? createEmptyDocument(),
       body: input.body ?? "",
       filePath: input.filePath,
       projectId: input.projectId,
       timelineRef: input.timelineRef,
       tags: input.tags ?? [],
-      blocks: input.blocks ?? [createBlock("text", { richText: "<p></p>" })],
+      blocks: input.blocks ?? [],
       createdAt,
       updatedAt: createdAt,
     });

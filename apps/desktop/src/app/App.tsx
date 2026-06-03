@@ -9,17 +9,13 @@ import {
   FileText,
   GitBranch,
   Hash,
-  Heading1,
   Image,
   Info,
-  Minus,
   PanelTop,
-  Pilcrow,
   Quote,
   Search,
   Settings,
   Sigma,
-  Square,
   Table2,
   Tags,
 } from "lucide-react";
@@ -43,23 +39,19 @@ const blockPalette: Array<{
   label: string;
   icon: React.ComponentType<{ size?: number }>;
 }> = [
-  { type: "heading", label: "Heading", icon: Heading1 },
-  { type: "text", label: "Text", icon: Pilcrow },
   { type: "callout", label: "Callout", icon: Info },
-  { type: "todo", label: "Todo", icon: CheckSquare },
   { type: "card", label: "Card", icon: PanelTop },
+  { type: "todo", label: "Todo list", icon: CheckSquare },
   { type: "code", label: "Code", icon: Code2 },
   { type: "image", label: "Image", icon: Image },
   { type: "artifact", label: "Artifact", icon: Box },
-  { type: "divider", label: "Divider", icon: Minus },
   { type: "quote", label: "Quote", icon: Quote },
   { type: "table", label: "Table", icon: Table2 },
-  { type: "chart", label: "Chart", icon: GitBranch },
-  { type: "canvas", label: "Canvas", icon: Square },
   { type: "mermaid", label: "Mermaid", icon: GitBranch },
   { type: "latex", label: "LaTeX", icon: Sigma },
   { type: "custom-html", label: "HTML", icon: Code2 },
   { type: "timeline", label: "Timeline", icon: Hash },
+  { type: "metric-card", label: "Metric", icon: Hash },
 ];
 
 export function App() {
@@ -76,7 +68,6 @@ export function App() {
     setActiveTool,
     closeTab,
     openNode,
-    addBlock,
   } = useAtriaStore();
 
   useEffect(() => {
@@ -135,7 +126,7 @@ export function App() {
             <div key={tab.key} className={tab.key === activeTabKey ? styles.tabActive : styles.tab}>
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
                 <span>{tab.title}</span>
-                <small>{tab.source}</small>
+                <small>{tab.type === "artifact" ? "HTML" : tab.type === "timeline" ? "Timeline" : "Page"}</small>
               </button>
               <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
                 x
@@ -146,17 +137,18 @@ export function App() {
 
         <section className={styles.documentSurface}>
           {activePage ? (
-            <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} />
+            <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
           ) : activeArtifact ? (
-            <ArtifactPreview artifact={activeArtifact} />
+            <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
           ) : (
             <div className={styles.emptyState}>No file selected</div>
           )}
         </section>
 
         <footer className={styles.statusBar}>
-          <span>{activeTab?.source === "ai" ? "AI HTML" : "Human note"}</span>
+          <span>{activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Page"}</span>
           <span>{activePage ? `${countCharacters(activePage)} characters` : activeArtifact?.updatedAt}</span>
+          <span>{snapshot?.title}</span>
         </footer>
       </main>
 
@@ -174,7 +166,7 @@ export function App() {
                 className={styles.blockButton}
                 disabled={activeTab?.type !== "page"}
                 title={block.label}
-                onClick={() => addBlock(block.type)}
+                onClick={() => dispatchInsert(block.type)}
               >
                 <span>
                   <Icon size={15} />
@@ -249,7 +241,7 @@ function SearchPane() {
               <button key={`${item.type}:${item.id}`} onClick={() => openNode(item.type, item.id)}>
                 <FileText size={14} />
                 <strong>{item.title}</strong>
-                <small>{item.source}</small>
+                <small>{item.type === "artifact" ? "HTML" : item.type}</small>
               </button>
             ))}
           </div>
@@ -391,10 +383,18 @@ function SettingsPane({
   );
 }
 
-function countCharacters(page: { title: string; body?: string; blocks: Array<Record<string, unknown>> }): number {
-  const blockText = page.blocks
-    .flatMap((block) => Object.values(block))
-    .map((value) => (typeof value === "string" ? value : ""))
-    .join("");
-  return `${page.title}${page.body ?? ""}${blockText}`.replace(/<[^>]*>/g, "").length;
+function dispatchInsert(type: AtriaBlockType): void {
+  window.dispatchEvent(new CustomEvent("atria:insert-node", { detail: { type } }));
+}
+
+function countCharacters(page: { title: string; body?: string; content?: unknown; blocks: Array<Record<string, unknown>> }): number {
+  return `${page.title}${extractDocumentText(page.content)}${page.body ?? ""}`.replace(/<[^>]*>/g, "").length;
+}
+
+function extractDocumentText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const record = node as { text?: unknown; content?: unknown };
+  const text = typeof record.text === "string" ? record.text : "";
+  const children = Array.isArray(record.content) ? record.content.map(extractDocumentText).join("") : "";
+  return text + children;
 }

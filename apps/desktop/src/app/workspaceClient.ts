@@ -2,6 +2,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import {
   Artifact,
   ArtifactSchema,
+  AtriaBlock,
+  AtriaDocumentContent,
   Page,
   PageSchema,
   WorkspaceFolder,
@@ -9,7 +11,7 @@ import {
   WorkspaceSnapshotSchema,
   WorkspaceTreeItem,
 } from "@atria/schema";
-import { createBlock, createDefaultWorkspace, nowIso, slugify } from "@atria/core";
+import { createDefaultWorkspace, createEmptyDocument, nowIso, slugify } from "@atria/core";
 
 interface WorkspaceEntry {
   name: string;
@@ -90,12 +92,12 @@ export async function deleteWorkspacePath(snapshot: WorkspaceSnapshot, relativeP
 export async function importImageDataUrl(snapshot: WorkspaceSnapshot, dataUrl: string): Promise<string> {
   const extension = extensionFromDataUrl(dataUrl);
   const relativePath = `Assets/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${extension}`;
-  const absolutePath = await invoke<string>("atria_write_data_url", {
+  await invoke<string>("atria_write_data_url", {
     rootPath: snapshot.settings.workspacePath,
     relativePath,
     dataUrl,
   });
-  return toFileAssetUrl(absolutePath);
+  return relativePath;
 }
 
 export function createPageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title: string): string {
@@ -112,6 +114,16 @@ export function toFileAssetUrl(path: string | undefined): string {
   } catch {
     return path;
   }
+}
+
+export function toWorkspaceFileAssetUrl(snapshot: WorkspaceSnapshot | undefined, path: string | undefined): string {
+  if (!path) return "";
+  if (/^(https?:|data:|asset:|file:|\/)/.test(path)) return path;
+  const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(path);
+  const absolutePath = isWindowsAbsolute
+    ? path
+    : joinNative(snapshot?.settings.workspacePath ?? "", path);
+  return toFileAssetUrl(absolutePath);
 }
 
 function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
@@ -302,27 +314,222 @@ async function hydrateWorkspace(
 }
 
 function normalizePageContent(page: Page): Page {
-  const legacyBody = (page.body ?? "").trim();
-  const hasLegacyBody = legacyBody && legacyBody !== "<p></p>";
-
-  if (page.blocks.length > 0) {
-    const hasSameText = page.blocks.some(
-      (block) => block.type === "text" && block.richText.trim() === legacyBody,
-    );
+  if (page.content?.type === "doc") {
     return PageSchema.parse({
       ...page,
-      body: "",
-      blocks: hasLegacyBody && !hasSameText
-        ? [createBlock("text", { richText: page.body }), ...page.blocks]
-        : page.blocks,
+      body: page.body ?? "",
+      blocks: page.blocks ?? [],
     });
   }
 
+  const nodes = [
+    ...richTextToDocumentNodes(page.body ?? ""),
+    ...(page.blocks ?? []).flatMap((block) => blockToDocumentNodes(block)),
+  ];
+
   return PageSchema.parse({
     ...page,
-    body: "",
-    blocks: [createBlock("text", { richText: hasLegacyBody ? page.body : "<p></p>" })],
+    content: {
+      type: "doc",
+      content: nodes.length ? nodes : createEmptyDocument().content,
+    },
+    body: page.body ?? "",
+    blocks: page.blocks ?? [],
   });
+}
+
+function blockToDocumentNodes(block: AtriaBlock): AtriaDocumentContent[] {
+  switch (block.type) {
+    case "heading":
+      return [
+        {
+          type: "heading",
+          attrs: { level: block.level },
+          content: textContent(block.text),
+        },
+      ];
+    case "text":
+      return richTextToDocumentNodes(block.richText);
+    case "todo":
+      return [
+        {
+          type: "taskList",
+          content: [
+            {
+              type: "taskItem",
+              attrs: { checked: block.checked },
+              content: [{ type: "paragraph", content: textContent(block.text) }],
+            },
+          ],
+        },
+      ];
+    case "callout":
+      return [
+        {
+          type: "atriaCallout",
+          attrs: { tone: block.tone, title: block.title, layout: "normal", align: "left" },
+          content: [{ type: "paragraph", content: textContent(block.text) }],
+        },
+      ];
+    case "card":
+      return [
+        {
+          type: "atriaCard",
+          attrs: { title: block.title, layout: "normal", align: "left" },
+          content: [{ type: "paragraph", content: textContent(block.text) }],
+        },
+      ];
+    case "code":
+      return [
+        {
+          type: "codeBlock",
+          attrs: { language: block.language || "text" },
+          content: textContent(block.code),
+        },
+      ];
+    case "image":
+      return [
+        {
+          type: "atriaImage",
+          attrs: {
+            src: block.src,
+            caption: block.caption,
+            width: block.width,
+            layout: "normal",
+            align: "center",
+            alt: block.caption,
+          },
+        },
+      ];
+    case "artifact":
+      return [
+        {
+          type: "atriaArtifact",
+          attrs: {
+            artifactId: block.artifactId,
+            note: block.note,
+            height: block.height,
+            collapsed: block.collapsed,
+            layout: "wide",
+            align: "center",
+          },
+        },
+      ];
+    case "divider":
+      return [{ type: "horizontalRule" }];
+    case "quote":
+      return [
+        {
+          type: "blockquote",
+          content: [{ type: "paragraph", content: textContent(block.text) }],
+        },
+      ];
+    case "table":
+      return [tableBlockToDocumentNode(block)];
+    case "mermaid":
+      return [{ type: "atriaMermaid", attrs: { code: block.code, layout: "wide", align: "center" } }];
+    case "latex":
+      return [
+        {
+          type: "atriaLatex",
+          attrs: { formula: block.formula, display: block.display, layout: "normal", align: "center" },
+        },
+      ];
+    case "custom-html":
+      return [{ type: "atriaHtml", attrs: { html: block.html, layout: "wide", align: "center", height: 320 } }];
+    case "timeline":
+      return [{ type: "atriaTimeline", attrs: { items: block.items, layout: "wide", align: "left" } }];
+    case "metric-card":
+      return [
+        {
+          type: "atriaMetric",
+          attrs: { label: block.label, value: block.value, delta: block.delta, layout: "normal", align: "left" },
+        },
+      ];
+    case "chart":
+    case "canvas":
+    case "gallery":
+    case "interactive":
+      return [
+        {
+          type: "atriaLegacy",
+          attrs: { legacyType: block.type, data: block, layout: "normal", align: "left" },
+        },
+      ];
+  }
+}
+
+function richTextToDocumentNodes(value: string): AtriaDocumentContent[] {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "<p></p>") return [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(trimmed, "text/html");
+  const nodes = Array.from(doc.body.childNodes)
+    .map((node) => domNodeToDocumentNode(node))
+    .filter(Boolean) as AtriaDocumentContent[];
+  if (nodes.length) return nodes;
+  return [{ type: "paragraph", content: textContent(stripHtml(trimmed)) }];
+}
+
+function domNodeToDocumentNode(node: ChildNode): AtriaDocumentContent | undefined {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent?.trim();
+    return text ? { type: "paragraph", content: textContent(text) } : undefined;
+  }
+  if (!(node instanceof HTMLElement)) return undefined;
+  const text = node.textContent?.trim() ?? "";
+  if (!text && node.tagName.toLowerCase() !== "hr") return undefined;
+  const tag = node.tagName.toLowerCase();
+  if (/^h[1-4]$/.test(tag)) {
+    return {
+      type: "heading",
+      attrs: { level: Number(tag.slice(1)) },
+      content: textContent(text),
+    };
+  }
+  if (tag === "blockquote") {
+    return {
+      type: "blockquote",
+      content: [{ type: "paragraph", content: textContent(text) }],
+    };
+  }
+  if (tag === "hr") return { type: "horizontalRule" };
+  return {
+    type: "paragraph",
+    content: textContent(text),
+  };
+}
+
+function tableBlockToDocumentNode(block: Extract<AtriaBlock, { type: "table" }>): AtriaDocumentContent {
+  const columns = block.columns.length ? block.columns : ["Column 1", "Column 2"];
+  const rows = block.rows.length ? block.rows : [columns.map(() => "")];
+  return {
+    type: "table",
+    content: [
+      {
+        type: "tableRow",
+        content: columns.map((column) => ({
+          type: "tableHeader",
+          content: [{ type: "paragraph", content: textContent(column) }],
+        })),
+      },
+      ...rows.map((row) => ({
+        type: "tableRow",
+        content: columns.map((_, index) => ({
+          type: "tableCell",
+          content: [{ type: "paragraph", content: textContent(row[index] ?? "") }],
+        })),
+      })),
+    ],
+  };
+}
+
+function textContent(text: string): AtriaDocumentContent[] | undefined {
+  return text ? [{ type: "text", text }] : undefined;
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function cleanPathSegment(input: string): string {
@@ -336,6 +543,11 @@ function joinRelative(...parts: Array<string | undefined>): string {
     .replace(/\\/g, "/")
     .replace(/\/+/g, "/")
     .replace(/^\/|\/$/g, "");
+}
+
+function joinNative(root: string, relativePath: string): string {
+  if (!root) return relativePath;
+  return `${root.replace(/[\\/]+$/g, "")}\\${relativePath.replace(/\//g, "\\")}`;
 }
 
 function folderIdFromPath(path: string): string {

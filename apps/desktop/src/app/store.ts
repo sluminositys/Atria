@@ -6,7 +6,7 @@ import {
   WorkspaceFolder,
   WorkspaceSnapshot,
 } from "@atria/schema";
-import { createBlock, nowIso, slugify } from "@atria/core";
+import { createBlock, createEmptyDocument, nowIso, slugify } from "@atria/core";
 import {
   createDirectory,
   createPageFilePath,
@@ -338,16 +338,16 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const createdAt = nowIso();
     const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}-note`;
     const filePath = uniquePageFilePath(snapshot, folderId, title);
-    const firstBlock = createBlock("text", { richText: "<p></p>" });
     const page: Page = {
       id,
       title,
       source: "human",
       kind: "note",
+      content: createEmptyDocument(),
       body: "",
       filePath,
       tags: [],
-      blocks: [firstBlock],
+      blocks: [],
       createdAt,
       updatedAt: createdAt,
     };
@@ -361,7 +361,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       ],
       updatedAt: nowIso(),
     };
-    set({ snapshot: next, selectedFolderId: folderId, activeBlockPageId: page.id, activeBlockId: firstBlock.id });
+    set({ snapshot: next, selectedFolderId: folderId, activeBlockPageId: undefined, activeBlockId: undefined });
     persist(next);
     get().openNode("page", page.id);
   },

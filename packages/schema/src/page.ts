@@ -3,11 +3,39 @@ import { AtriaBlockSchema, BlockSourceSchema } from "./block";
 
 export const PageKindSchema = z.enum(["note", "timeline", "template"]);
 
+export const AtriaDocumentMarkSchema = z
+  .object({
+    type: z.string(),
+    attrs: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
+
+export type AtriaDocumentContent = {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: AtriaDocumentContent[];
+  marks?: z.infer<typeof AtriaDocumentMarkSchema>[];
+  text?: string;
+};
+
+export const AtriaDocumentContentSchema: z.ZodType<AtriaDocumentContent> = z.lazy(() =>
+  z
+    .object({
+      type: z.string(),
+      attrs: z.record(z.unknown()).optional(),
+      content: z.array(AtriaDocumentContentSchema).optional(),
+      marks: z.array(AtriaDocumentMarkSchema).optional(),
+      text: z.string().optional(),
+    })
+    .passthrough(),
+);
+
 export const PageSchema = z.object({
   id: z.string(),
   title: z.string(),
   source: BlockSourceSchema.default("human"),
   kind: PageKindSchema.default("note"),
+  content: AtriaDocumentContentSchema.optional(),
   body: z.string().default(""),
   filePath: z.string().optional(),
   projectId: z.string().optional(),

@@ -1,0 +1,714 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Node, mergeAttributes } from "@tiptap/core";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import Table from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
+import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { common, createLowlight } from "lowlight";
+import type { Artifact, AtriaBlockType, AtriaDocumentContent, WorkspaceSnapshot } from "@atria/schema";
+import { createEmptyDocument } from "@atria/core";
+import { importImageDataUrl } from "../../app/workspaceClient";
+import { ArtifactPicker } from "./ArtifactPicker";
+import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
+import { ImageInsertDialog } from "./ImageInsertDialog";
+import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
+import {
+  SlashCommandMenu,
+  slashCommandAt,
+  slashCommandCount,
+  type SlashCommand,
+  type SlashMenuState,
+} from "./SlashCommandMenu";
+import {
+  ArtifactNodeView,
+  CalloutNodeView,
+  CardNodeView,
+  CodeBlockNodeView,
+  HtmlNodeView,
+  ImageNodeView,
+  LatexNodeView,
+  LegacyNodeView,
+  MermaidNodeView,
+  MetricNodeView,
+  TimelineNodeView,
+} from "./nodes/StructuredNodeViews";
+import styles from "../../app/App.module.css";
+
+interface AtriaDocumentEditorProps {
+  value?: AtriaDocumentContent;
+  artifacts: Artifact[];
+  snapshot?: WorkspaceSnapshot;
+  onChange(content: AtriaDocumentContent): void;
+}
+
+interface SlashState extends SlashMenuState {
+  range: { from: number; to: number };
+}
+
+const lowlight = createLowlight(common);
+
+export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
+  const editorRef = useRef<Editor | null>(null);
+  const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [slash, setSlash] = useState<SlashState | null>(null);
+
+  const workspacePath = snapshot?.settings.workspacePath ?? "";
+  const assetSnapshot = useMemo(
+    () => (workspacePath ? ({ settings: { workspacePath } } as WorkspaceSnapshot) : undefined),
+    [workspacePath],
+  );
+  const extensions = useMemo(() => createExtensions(artifacts, assetSnapshot), [artifacts, assetSnapshot]);
+  const editor = useEditor(
+    {
+      extensions,
+      content: value ?? createEmptyDocument(),
+      editorProps: {
+        attributes: {
+          class: styles.documentEditorSurface ?? "",
+        },
+        handleTextInput(view, from, _to, text) {
+          if (text !== "/") return false;
+          const coords = view.coordsAtPos(from);
+          setSlash({
+            x: coords.left,
+            y: coords.bottom + 8,
+            selectedIndex: 0,
+            range: { from, to: from + 1 },
+          });
+          return false;
+        },
+        handleKeyDown(_view, event) {
+          if (slash) {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setSlash((current) =>
+                current
+                  ? { ...current, selectedIndex: (current.selectedIndex + 1) % slashCommandCount() }
+                  : current,
+              );
+              return true;
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setSlash((current) =>
+                current
+                  ? {
+                      ...current,
+                      selectedIndex: (current.selectedIndex - 1 + slashCommandCount()) % slashCommandCount(),
+                    }
+                  : current,
+              );
+              return true;
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              executeSlashCommand(slashCommandAt(slash.selectedIndex));
+              return true;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setSlash(null);
+              return true;
+            }
+          }
+          if (event.key === "Escape") setContextMenu(null);
+          return false;
+        },
+        handlePaste(_view, event) {
+          const file = Array.from(event.clipboardData?.items ?? [])
+            .find((item) => item.type.startsWith("image/"))
+            ?.getAsFile();
+          if (!file) return false;
+          event.preventDefault();
+          void insertImageFile(file);
+          return true;
+        },
+        handleDrop(_view, event) {
+          const file = Array.from(event.dataTransfer?.files ?? []).find((item) => item.type.startsWith("image/"));
+          if (!file) return false;
+          event.preventDefault();
+          void insertImageFile(file);
+          return true;
+        },
+        handleDOMEvents: {
+          contextmenu(_view, event) {
+            event.preventDefault();
+            setSlash(null);
+            setContextMenu({ x: event.clientX, y: event.clientY });
+            return true;
+          },
+        },
+      },
+      onUpdate({ editor }) {
+        onChange(editor.getJSON() as AtriaDocumentContent);
+      },
+      onSelectionUpdate() {
+        setContextMenu(null);
+      },
+    },
+    [extensions],
+  );
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const next = value ?? createEmptyDocument();
+    if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) {
+      editor.commands.setContent(next, false);
+    }
+  }, [editor, value]);
+
+  useEffect(() => {
+    function onInsert(event: Event) {
+      const detail = (event as CustomEvent<{ type: AtriaBlockType | SlashCommand }>).detail;
+      if (!detail?.type) return;
+      insertFromPalette(detail.type);
+    }
+    window.addEventListener("atria:insert-node", onInsert);
+    return () => window.removeEventListener("atria:insert-node", onInsert);
+  });
+
+  useEffect(() => {
+    function closeMenus() {
+      setContextMenu(null);
+    }
+    window.addEventListener("click", closeMenus);
+    return () => window.removeEventListener("click", closeMenus);
+  }, []);
+
+  if (!editor) return null;
+
+  async function insertImageFile(file: File) {
+    const currentEditor = editorRef.current;
+    if (!currentEditor || !snapshot) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    const src = await importImageDataUrl(snapshot, dataUrl);
+    insertImage(src, file.name);
+  }
+
+  function insertImage(src: string, alt = "") {
+    editorRef.current
+      ?.chain()
+      .focus()
+      .insertContent({
+        type: "atriaImage",
+        attrs: { src, alt, caption: "", width: 640, layout: "normal", align: "center" },
+      })
+      .run();
+  }
+
+  function insertArtifact(artifact: Artifact) {
+    editorRef.current
+      ?.chain()
+      .focus()
+      .insertContent({
+        type: "atriaArtifact",
+        attrs: {
+          artifactId: artifact.id,
+          height: 420,
+          collapsed: false,
+          note: "",
+          layout: "wide",
+          align: "center",
+        },
+      })
+      .run();
+  }
+
+  function executeSlashCommand(command: SlashCommand) {
+    const current = editorRef.current;
+    if (!current || !slash) return;
+    current.chain().focus().deleteRange(slash.range).run();
+    setSlash(null);
+    insertFromPalette(command);
+  }
+
+  function insertFromPalette(type: AtriaBlockType | SlashCommand) {
+    const current = editorRef.current;
+    if (!current) return;
+    current.chain().focus().run();
+    switch (type) {
+      case "paragraph":
+      case "text":
+        current.chain().focus().setParagraph().run();
+        return;
+      case "heading":
+      case "heading-1":
+        current.chain().focus().toggleHeading({ level: 1 }).run();
+        return;
+      case "heading-2":
+        current.chain().focus().toggleHeading({ level: 2 }).run();
+        return;
+      case "heading-3":
+        current.chain().focus().toggleHeading({ level: 3 }).run();
+        return;
+      case "todo":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "taskList",
+            content: [
+              {
+                type: "taskItem",
+                attrs: { checked: false },
+                content: [{ type: "paragraph" }],
+              },
+            ],
+          })
+          .run();
+        return;
+      case "quote":
+        current.chain().focus().toggleBlockquote().run();
+        return;
+      case "code":
+        current.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text" } }).run();
+        return;
+      case "callout":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaCallout",
+            attrs: { tone: "info", title: "Note", layout: "normal", align: "left" },
+            content: [{ type: "paragraph" }],
+          })
+          .run();
+        return;
+      case "card":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaCard",
+            attrs: { title: "Card", layout: "normal", align: "left" },
+            content: [{ type: "paragraph" }],
+          })
+          .run();
+        return;
+      case "artifact":
+        setArtifactPickerOpen(true);
+        return;
+      case "image":
+        setImageDialogOpen(true);
+        return;
+      case "table":
+        current.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        return;
+      case "mermaid":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaMermaid",
+            attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", layout: "wide", align: "center" },
+          })
+          .run();
+        return;
+      case "latex":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaLatex",
+            attrs: { formula: "E = mc^2", display: true, layout: "normal", align: "center" },
+          })
+          .run();
+        return;
+      case "custom-html":
+      case "html":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaHtml",
+            attrs: { html: "<section></section>", height: 320, layout: "wide", align: "center" },
+          })
+          .run();
+        return;
+      case "timeline":
+        current
+          .chain()
+          .focus()
+          .insertContent({ type: "atriaTimeline", attrs: { items: [], layout: "wide", align: "left" } })
+          .run();
+        return;
+      case "metric":
+      case "metric-card":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaMetric",
+            attrs: { label: "Metric", value: "0", delta: "", layout: "normal", align: "left" },
+          })
+          .run();
+        return;
+      default:
+        return;
+    }
+  }
+
+  return (
+    <div className={styles.documentEditor}>
+      <SelectionBubbleMenu
+        editor={editor}
+        onInsertArtifact={() => setArtifactPickerOpen(true)}
+        onInsertImage={() => setImageDialogOpen(true)}
+      />
+      <EditorContent editor={editor} />
+      <EditorContextMenu
+        editor={editor}
+        state={contextMenu}
+        onClose={() => setContextMenu(null)}
+        onInsertArtifact={() => setArtifactPickerOpen(true)}
+        onInsertImage={() => setImageDialogOpen(true)}
+      />
+      <SlashCommandMenu state={slash} onSelect={executeSlashCommand} />
+      <ArtifactPicker
+        artifacts={artifacts}
+        open={artifactPickerOpen}
+        onClose={() => setArtifactPickerOpen(false)}
+        onSelect={insertArtifact}
+      />
+      <ImageInsertDialog
+        open={imageDialogOpen}
+        onClose={() => setImageDialogOpen(false)}
+        onInsertUrl={insertImage}
+        onInsertFile={(file) => void insertImageFile(file)}
+      />
+    </div>
+  );
+}
+
+function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
+  return [
+    StarterKit.configure({
+      codeBlock: false,
+      heading: { levels: [1, 2, 3, 4] },
+    }),
+    Placeholder.configure({
+      placeholder: "Write, paste, or type / to insert...",
+    }),
+    Link.configure({
+      openOnClick: true,
+      autolink: true,
+      linkOnPaste: true,
+    }),
+    TaskList.configure({ HTMLAttributes: { class: styles.documentTaskList } }),
+    TaskItem.configure({ nested: true, HTMLAttributes: { class: styles.documentTaskItem } }),
+    Table.configure({
+      resizable: true,
+      HTMLAttributes: { class: styles.documentTable },
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    CodeBlockLowlight.extend({
+      addNodeView() {
+        return ReactNodeViewRenderer(CodeBlockNodeView);
+      },
+    }).configure({ lowlight }),
+    createCardNode(),
+    createCalloutNode(),
+    createImageNode(snapshot),
+    createArtifactNode(artifacts, snapshot),
+    createMermaidNode(),
+    createLatexNode(),
+    createHtmlNode(),
+    createMetricNode(),
+    createTimelineNode(),
+    createLegacyNode(),
+  ];
+}
+
+const layoutAttributes = {
+  layout: {
+    default: "normal",
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-layout") ?? "normal",
+    renderHTML: (attrs: Record<string, unknown>) => ({ "data-layout": attrs.layout }),
+  },
+  align: {
+    default: "left",
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-align") ?? "left",
+    renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": attrs.align }),
+  },
+};
+
+function createCardNode() {
+  return Node.create({
+    name: "atriaCard",
+    group: "block",
+    content: "block+",
+    defining: true,
+    isolating: true,
+    addAttributes() {
+      return {
+        title: { default: "Card" },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="card"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "card" }), 0];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(CardNodeView);
+    },
+  });
+}
+
+function createCalloutNode() {
+  return Node.create({
+    name: "atriaCallout",
+    group: "block",
+    content: "block+",
+    defining: true,
+    isolating: true,
+    addAttributes() {
+      return {
+        title: { default: "Note" },
+        tone: { default: "info" },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'aside[data-atria-node="callout"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["aside", mergeAttributes(HTMLAttributes, { "data-atria-node": "callout" }), 0];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(CalloutNodeView);
+    },
+  });
+}
+
+function createImageNode(snapshot?: WorkspaceSnapshot) {
+  return Node.create({
+    name: "atriaImage",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        src: { default: "" },
+        caption: { default: "" },
+        alt: { default: "" },
+        width: { default: 640 },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'figure[data-atria-node="image"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["figure", mergeAttributes(HTMLAttributes, { "data-atria-node": "image" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer((props) => <ImageNodeView {...props} snapshot={snapshot} />);
+    },
+  });
+}
+
+function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
+  return Node.create({
+    name: "atriaArtifact",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        artifactId: { default: "" },
+        height: { default: 420 },
+        collapsed: { default: false },
+        note: { default: "" },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="artifact"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "artifact" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer((props) => <ArtifactNodeView {...props} artifacts={artifacts} snapshot={snapshot} />);
+    },
+  });
+}
+
+function createMermaidNode() {
+  return Node.create({
+    name: "atriaMermaid",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        code: { default: "graph TD\n  A[Atria] --> B[Artifact]" },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="mermaid"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "mermaid" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(MermaidNodeView);
+    },
+  });
+}
+
+function createLatexNode() {
+  return Node.create({
+    name: "atriaLatex",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        formula: { default: "" },
+        display: { default: true },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="latex"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "latex" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(LatexNodeView);
+    },
+  });
+}
+
+function createHtmlNode() {
+  return Node.create({
+    name: "atriaHtml",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        html: { default: "<section></section>" },
+        height: { default: 320 },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="html"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "html" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(HtmlNodeView);
+    },
+  });
+}
+
+function createMetricNode() {
+  return Node.create({
+    name: "atriaMetric",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        label: { default: "Metric" },
+        value: { default: "0" },
+        delta: { default: "" },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="metric"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "metric" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(MetricNodeView);
+    },
+  });
+}
+
+function createTimelineNode() {
+  return Node.create({
+    name: "atriaTimeline",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        items: { default: [] },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="timeline"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "timeline" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(TimelineNodeView);
+    },
+  });
+}
+
+function createLegacyNode() {
+  return Node.create({
+    name: "atriaLegacy",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        legacyType: { default: "legacy" },
+        data: { default: null },
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="legacy"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "legacy" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(LegacyNodeView);
+    },
+  });
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Failed to read image"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
+}
