@@ -27,6 +27,7 @@ export const ArtifactCreateInputSchema = ArtifactSchema.omit({
   createdAt: true,
   updatedAt: true,
 }).partial({
+  id: true,
   description: true,
   kind: true,
   entryFile: true,
@@ -39,4 +40,3 @@ export const ArtifactCreateInputSchema = ArtifactSchema.omit({
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type ArtifactCreateInput = z.infer<typeof ArtifactCreateInputSchema>;
-

@@ -7,32 +7,46 @@ import {
 } from "@atria/schema";
 import { z } from "zod";
 
-export interface AtriaMcpTool<Input> {
+export interface AtriaMcpTool {
   name: string;
   description: string;
-  inputSchema: z.ZodType<Input>;
-  handler(input: Input): Promise<unknown>;
+  inputSchema: z.AnyZodObject;
+  handler(input: unknown): Promise<unknown>;
 }
 
-export function createAtriaMcpTools(service: WorkspaceService): AtriaMcpTool<unknown>[] {
+function defineTool<Schema extends z.AnyZodObject>(
+  name: string,
+  description: string,
+  inputSchema: Schema,
+  handler: (input: z.infer<Schema>) => Promise<unknown>,
+): AtriaMcpTool {
+  return {
+    name,
+    description,
+    inputSchema,
+    handler: (input) => handler(inputSchema.parse(input)),
+  };
+}
+
+export function createAtriaMcpTools(service: WorkspaceService): AtriaMcpTool[] {
   return [
-    {
-      name: "workspace_get_tree",
-      description: "Read the current Atria workspace tree, pages, artifacts, timeline, and projects.",
-      inputSchema: z.object({}),
-      handler: async () => service.getSnapshot(),
-    },
-    {
-      name: "workspace_search",
-      description: "Search Atria pages and HTML artifacts by title, tags, description, or id.",
-      inputSchema: WorkspaceSearchInputSchema,
-      handler: async (input) => service.search(input.query, input.limit),
-    },
-    {
-      name: "artifact_register",
-      description: "Register an AI-created HTML artifact in the Atria workspace.",
-      inputSchema: ArtifactRegisterInputSchema,
-      handler: async (input) =>
+    defineTool(
+      "workspace_get_tree",
+      "Read the current Atria workspace tree, pages, artifacts, timeline, and projects.",
+      z.object({}),
+      async () => service.getSnapshot(),
+    ),
+    defineTool(
+      "workspace_search",
+      "Search Atria pages and HTML artifacts by title, tags, description, or id.",
+      WorkspaceSearchInputSchema,
+      async (input) => service.search(input.query, input.limit),
+    ),
+    defineTool(
+      "artifact_register",
+      "Register an AI-created HTML artifact in the Atria workspace.",
+      ArtifactRegisterInputSchema,
+      async (input) =>
         service.registerArtifact({
           id: input.id,
           title: input.title,
@@ -41,72 +55,72 @@ export function createAtriaMcpTools(service: WorkspaceService): AtriaMcpTool<unk
           projectId: input.projectId,
           tags: input.tags,
         }),
-    },
-    {
-      name: "artifact_list",
-      description: "List registered Atria artifacts.",
-      inputSchema: z.object({}),
-      handler: async () => (await service.getSnapshot()).artifacts,
-    },
-    {
-      name: "artifact_get",
-      description: "Read one Atria artifact metadata record.",
-      inputSchema: z.object({ artifactId: z.string() }),
-      handler: async ({ artifactId }) =>
+    ),
+    defineTool(
+      "artifact_list",
+      "List registered Atria artifacts.",
+      z.object({}),
+      async () => (await service.getSnapshot()).artifacts,
+    ),
+    defineTool(
+      "artifact_get",
+      "Read one Atria artifact metadata record.",
+      z.object({ artifactId: z.string() }),
+      async ({ artifactId }) =>
         (await service.getSnapshot()).artifacts.find((item) => item.id === artifactId),
-    },
-    {
-      name: "artifact_delete",
-      description: "Soft-delete an Atria artifact from the workspace index.",
-      inputSchema: z.object({ artifactId: z.string() }),
-      handler: async ({ artifactId }) => {
+    ),
+    defineTool(
+      "artifact_delete",
+      "Soft-delete an Atria artifact from the workspace index.",
+      z.object({ artifactId: z.string() }),
+      async ({ artifactId }) => {
         await service.deleteArtifact(artifactId);
         return { ok: true };
       },
-    },
-    {
-      name: "page_create",
-      description: "Create a human-readable Atria page with block content.",
-      inputSchema: PageCreateToolInputSchema,
-      handler: async (input) => service.createPage(input),
-    },
-    {
-      name: "page_list",
-      description: "List Atria pages.",
-      inputSchema: z.object({}),
-      handler: async () => (await service.getSnapshot()).pages,
-    },
-    {
-      name: "page_get",
-      description: "Read one Atria page.",
-      inputSchema: z.object({ pageId: z.string() }),
-      handler: async ({ pageId }) => (await service.getSnapshot()).pages.find((item) => item.id === pageId),
-    },
-    {
-      name: "page_append_block",
-      description: "Append a block to an existing Atria page.",
-      inputSchema: PageAppendBlockInputSchema,
-      handler: async (input) => service.appendBlock(input.pageId, input.block),
-    },
-    {
-      name: "page_replace_blocks",
-      description: "Replace all blocks in an Atria page.",
-      inputSchema: z.object({ pageId: z.string(), blocks: z.array(PageAppendBlockInputSchema.shape.block) }),
-      handler: async ({ pageId, blocks }) => service.replaceBlocks(pageId, blocks),
-    },
-    {
-      name: "page_delete",
-      description: "Delete a human-created Atria page.",
-      inputSchema: z.object({ pageId: z.string() }),
-      handler: async ({ pageId }) => {
+    ),
+    defineTool(
+      "page_create",
+      "Create a human-readable Atria page with block content.",
+      PageCreateToolInputSchema,
+      async (input) => service.createPage(input),
+    ),
+    defineTool(
+      "page_list",
+      "List Atria pages.",
+      z.object({}),
+      async () => (await service.getSnapshot()).pages,
+    ),
+    defineTool(
+      "page_get",
+      "Read one Atria page.",
+      z.object({ pageId: z.string() }),
+      async ({ pageId }) => (await service.getSnapshot()).pages.find((item) => item.id === pageId),
+    ),
+    defineTool(
+      "page_append_block",
+      "Append a block to an existing Atria page.",
+      PageAppendBlockInputSchema,
+      async (input) => service.appendBlock(input.pageId, input.block),
+    ),
+    defineTool(
+      "page_replace_blocks",
+      "Replace all blocks in an Atria page.",
+      z.object({ pageId: z.string(), blocks: z.array(PageAppendBlockInputSchema.shape.block) }),
+      async ({ pageId, blocks }) => service.replaceBlocks(pageId, blocks),
+    ),
+    defineTool(
+      "page_delete",
+      "Delete a human-created Atria page.",
+      z.object({ pageId: z.string() }),
+      async ({ pageId }) => {
         await service.deletePage(pageId);
         return { ok: true };
       },
-    },
-    {
-      name: "block_append",
-      description: "Append a simple block to a page by block type.",
-      inputSchema: z.object({
+    ),
+    defineTool(
+      "block_append",
+      "Append a simple block to a page by block type.",
+      z.object({
         pageId: z.string(),
         type: z.enum([
           "heading",
@@ -124,45 +138,45 @@ export function createAtriaMcpTools(service: WorkspaceService): AtriaMcpTool<unk
           "custom-html",
         ]),
       }),
-      handler: async ({ pageId, type }) => service.appendBlock(pageId, createBlock(type)),
-    },
-    {
-      name: "timeline_create_daily_summary",
-      description: "Create a daily Atria timeline summary.",
-      inputSchema: z.object({ date: z.string(), title: z.string().optional() }),
-      handler: async ({ date, title }) => service.createTimelineSummary("daily", date, title),
-    },
-    {
-      name: "timeline_create_weekly_summary",
-      description: "Create a weekly Atria timeline summary.",
-      inputSchema: z.object({ week: z.string(), title: z.string().optional() }),
-      handler: async ({ week, title }) => service.createTimelineSummary("weekly", week, title),
-    },
-    {
-      name: "timeline_create_monthly_summary",
-      description: "Create a monthly Atria timeline summary.",
-      inputSchema: z.object({ month: z.string(), title: z.string().optional() }),
-      handler: async ({ month, title }) => service.createTimelineSummary("monthly", month, title),
-    },
-    {
-      name: "timeline_get_recent",
-      description: "Read recent Atria timeline summaries.",
-      inputSchema: z.object({ limit: z.number().int().min(1).max(30).default(10) }),
-      handler: async ({ limit }) => (await service.getSnapshot()).timeline.slice(0, limit),
-    },
-    {
-      name: "project_get_state",
-      description: "Read one Atria project state.",
-      inputSchema: z.object({ projectId: z.string() }),
-      handler: async ({ projectId }) =>
+      async ({ pageId, type }) => service.appendBlock(pageId, createBlock(type)),
+    ),
+    defineTool(
+      "timeline_create_daily_summary",
+      "Create a daily Atria timeline summary.",
+      z.object({ date: z.string(), title: z.string().optional() }),
+      async ({ date, title }) => service.createTimelineSummary("daily", date, title),
+    ),
+    defineTool(
+      "timeline_create_weekly_summary",
+      "Create a weekly Atria timeline summary.",
+      z.object({ week: z.string(), title: z.string().optional() }),
+      async ({ week, title }) => service.createTimelineSummary("weekly", week, title),
+    ),
+    defineTool(
+      "timeline_create_monthly_summary",
+      "Create a monthly Atria timeline summary.",
+      z.object({ month: z.string(), title: z.string().optional() }),
+      async ({ month, title }) => service.createTimelineSummary("monthly", month, title),
+    ),
+    defineTool(
+      "timeline_get_recent",
+      "Read recent Atria timeline summaries.",
+      z.object({ limit: z.number().int().min(1).max(30).default(10) }),
+      async ({ limit }) => (await service.getSnapshot()).timeline.slice(0, limit),
+    ),
+    defineTool(
+      "project_get_state",
+      "Read one Atria project state.",
+      z.object({ projectId: z.string() }),
+      async ({ projectId }) =>
         (await service.getSnapshot()).projects.find((item) => item.id === projectId),
-    },
-    {
-      name: "project_update_state",
-      description: "Reserved semantic project update entrypoint.",
-      inputSchema: z.object({ projectId: z.string(), status: z.enum(["active", "paused", "archived"]) }),
-      handler: async ({ projectId, status }) => ({ projectId, status, ok: true }),
-    },
+    ),
+    defineTool(
+      "project_update_state",
+      "Reserved semantic project update entrypoint.",
+      z.object({ projectId: z.string(), status: z.enum(["active", "paused", "archived"]) }),
+      async ({ projectId, status }) => ({ projectId, status, ok: true }),
+    ),
   ];
 }
 
@@ -183,4 +197,3 @@ export const atriaPrompts = [
   "extract_next_actions",
   "generate_html_report",
 ];
-

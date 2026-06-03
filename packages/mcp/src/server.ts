@@ -9,12 +9,12 @@ export async function startAtriaMcpServer(workspacePath = resolveWorkspacePath()
   const server = new McpServer({ name: "atria", version: "0.1.0" });
 
   for (const tool of createAtriaMcpTools(service)) {
-    server.tool(tool.name, tool.description, tool.inputSchema.shape, async (input) => {
+    server.tool(tool.name, tool.description, tool.inputSchema.shape, async (input: unknown) => {
       const result = await tool.handler(input);
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify(result, null, 2),
           },
         ],
@@ -24,4 +24,3 @@ export async function startAtriaMcpServer(workspacePath = resolveWorkspacePath()
 
   await server.connect(new StdioServerTransport());
 }
-

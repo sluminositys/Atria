@@ -1,0 +1,27 @@
+:root {
+  color-scheme: light;
+  --atria-rail-width: 48px;
+  --atria-tree-width: 322px;
+  --atria-block-width: 148px;
+  --atria-bg: #f8f8f7;
+  --atria-rail-bg: #f1f1ef;
+  --atria-pane-bg: #f6f6f4;
+  --atria-paper: #ffffff;
+  --atria-ink: #101828;
+  --atria-text: #30343b;
+  --atria-muted: #667085;
+  --atria-faint: #98a2b3;
+  --atria-line: #d9d9d6;
+  --atria-soft-line: #ececea;
+  --atria-hover: #eeeeeb;
+  --atria-active: #e7e7e4;
+  --atria-blue: #2f80ed;
+  --atria-blue-soft: #eff6ff;
+  --atria-green: #16a34a;
+  --atria-radius: 6px;
+  --atria-font:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+    sans-serif;
+  --atria-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
