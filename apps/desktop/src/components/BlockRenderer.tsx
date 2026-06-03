@@ -1,7 +1,10 @@
+import type { PointerEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import katex from "katex";
+import mermaid from "mermaid";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Artifact, AtriaBlock } from "@atria/schema";
-import { RichTextBlock } from "./RichTextBlock";
+import { toFileAssetUrl } from "../app/workspaceClient";
 import styles from "../app/App.module.css";
 import "katex/dist/katex.min.css";
 
@@ -11,31 +14,21 @@ interface BlockRendererProps {
   onChange(patch: Partial<AtriaBlock>): void;
 }
 
-export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps) {
-  if (block.type === "heading") {
-    return (
-      <input
-        className={styles.headingBlock}
-        value={block.text}
-        onChange={(event) => onChange({ text: event.target.value })}
-      />
-    );
-  }
+type CanvasElement = {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+};
 
-  if (block.type === "text") {
-    return (
-      <RichTextBlock
-        value={block.richText}
-        onChange={(richText) => onChange({ richText })}
-      />
-    );
-  }
+export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps) {
+  if (block.type === "heading" || block.type === "text") return null;
 
   if (block.type === "callout") {
     return (
       <div className={styles.calloutBlock}>
-        <input value={block.title} onChange={(event) => onChange({ title: event.target.value })} />
-        <textarea value={block.text} onChange={(event) => onChange({ text: event.target.value })} />
+        <input placeholder="Title" value={block.title} onChange={(event) => onChange({ title: event.target.value })} />
+        <textarea placeholder="Text" value={block.text} onChange={(event) => onChange({ text: event.target.value })} />
       </div>
     );
   }
@@ -56,8 +49,8 @@ export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps
   if (block.type === "card") {
     return (
       <div className={styles.cardBlock}>
-        <input value={block.title} onChange={(event) => onChange({ title: event.target.value })} />
-        <textarea value={block.text} onChange={(event) => onChange({ text: event.target.value })} />
+        <input placeholder="Title" value={block.title} onChange={(event) => onChange({ title: event.target.value })} />
+        <textarea placeholder="Text" value={block.text} onChange={(event) => onChange({ text: event.target.value })} />
       </div>
     );
   }
@@ -72,13 +65,7 @@ export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps
   }
 
   if (block.type === "image") {
-    return (
-      <div className={styles.imageBlock}>
-        {block.src && <img src={block.src} alt={block.caption} />}
-        <input placeholder="Image URL" value={block.src} onChange={(event) => onChange({ src: event.target.value })} />
-        <input placeholder="Caption" value={block.caption} onChange={(event) => onChange({ caption: event.target.value })} />
-      </div>
-    );
+    return <ImageBlock block={block} onChange={onChange} />;
   }
 
   if (block.type === "artifact") {
@@ -104,7 +91,7 @@ export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps
         <input value={block.note} onChange={(event) => onChange({ note: event.target.value })} />
         {artifact && (
           <iframe
-            src={artifact.entryUrl}
+            src={artifact.entryUrl || toFileAssetUrl(artifact.filePath)}
             title={artifact.title}
             sandbox="allow-scripts allow-forms allow-popups"
             style={{ height: block.height }}
@@ -125,101 +112,423 @@ export function BlockRenderer({ block, artifacts, onChange }: BlockRendererProps
   }
 
   if (block.type === "table") {
-    return (
-      <table className={styles.tableBlock}>
-        <thead>
-          <tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr>
-        </thead>
-        <tbody>
-          {block.rows.map((row, index) => (
-            <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    );
+    return <TableBlock block={block} onChange={onChange} />;
   }
 
   if (block.type === "chart") {
-    const data = block.series.length
-      ? block.series
-      : [
-          { name: "05-24", value: 0.62 },
-          { name: "05-25", value: 0.68 },
-          { name: "05-26", value: 0.71 },
-          { name: "05-27", value: 0.73 },
-          { name: "05-28", value: 0.78 },
-        ];
-    return (
-      <div className={styles.chartBlock}>
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data}>
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#2f80ed" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    );
+    return <ChartBlock block={block} onChange={onChange} />;
   }
 
-  if (block.type === "canvas") return <div className={styles.canvasBlock}>Canvas</div>;
+  if (block.type === "canvas") {
+    return <CanvasBlock block={block} onChange={onChange} />;
+  }
 
   if (block.type === "mermaid") {
-    return (
-      <div className={styles.mermaidBlock}>
-        <textarea value={block.code} onChange={(event) => onChange({ code: event.target.value })} />
-      </div>
-    );
+    return <MermaidBlock block={block} onChange={onChange} />;
   }
 
   if (block.type === "latex") {
-    return (
-      <div className={styles.latexBlock}>
-        <input value={block.formula} onChange={(event) => onChange({ formula: event.target.value })} />
-        <div dangerouslySetInnerHTML={{ __html: katex.renderToString(block.formula || " ", { throwOnError: false }) }} />
-      </div>
-    );
+    return <LatexBlock block={block} onChange={onChange} />;
   }
 
-  if (block.type === "interactive") return <div className={styles.interactiveBlock}>Interactive block</div>;
+  if (block.type === "interactive") return <div className={styles.interactiveBlock} />;
 
   if (block.type === "custom-html") {
-    return (
-      <div className={styles.customHtmlBlock}>
-        <textarea value={block.html} onChange={(event) => onChange({ html: event.target.value })} />
-        <iframe srcDoc={block.html} sandbox={block.sandbox ? "" : undefined} title={block.id} />
-      </div>
-    );
+    return <CustomHtmlBlock block={block} onChange={onChange} />;
   }
 
   if (block.type === "timeline") {
-    return (
-      <div className={styles.timelineBlock}>
-        {block.items.map((item) => (
-          <div key={`${item.at}-${item.title}`}>
-            <strong>{item.at}</strong>
-            <span>{item.title}</span>
-            <small>{item.detail}</small>
-          </div>
-        ))}
-      </div>
-    );
+    return <TimelineBlock block={block} onChange={onChange} />;
   }
 
   if (block.type === "metric-card") {
     return (
       <div className={styles.metricBlock}>
-        <input value={block.label} onChange={(event) => onChange({ label: event.target.value })} />
-        <strong>{block.value}</strong>
-        <input value={block.value} onChange={(event) => onChange({ value: event.target.value })} />
-        <small>{block.delta}</small>
+        <input placeholder="Label" value={block.label} onChange={(event) => onChange({ label: event.target.value })} />
+        <input placeholder="Value" value={block.value} onChange={(event) => onChange({ value: event.target.value })} />
+        <input placeholder="Delta" value={block.delta} onChange={(event) => onChange({ delta: event.target.value })} />
       </div>
     );
   }
 
-  if (block.type === "gallery") return <div className={styles.galleryBlock}>Gallery</div>;
+  if (block.type === "gallery") {
+    return (
+      <div className={styles.galleryBlock}>
+        {block.images.map((image, index) => (
+          <figure key={image.id}>
+            <img src={image.src} alt={image.caption} />
+            <input
+              value={image.caption}
+              onChange={(event) => {
+                const images = [...block.images];
+                images[index] = { ...image, caption: event.target.value };
+                onChange({ images });
+              }}
+            />
+          </figure>
+        ))}
+      </div>
+    );
+  }
 
   return null;
 }
 
+function ImageBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "image" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  return (
+    <div
+      className={styles.imageBlock}
+      onPaste={(event) => {
+        const item = Array.from(event.clipboardData.items).find((clipboardItem) =>
+          clipboardItem.type.startsWith("image/"),
+        );
+        const file = item?.getAsFile();
+        if (!file) return;
+        event.preventDefault();
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") onChange({ src: reader.result });
+        };
+        reader.readAsDataURL(file);
+      }}
+    >
+      {block.src && (
+        <img
+          src={block.src}
+          alt={block.caption}
+          style={{ width: block.width, maxWidth: "100%" }}
+        />
+      )}
+      <input placeholder="Image URL" value={block.src} onChange={(event) => onChange({ src: event.target.value })} />
+      <input placeholder="Caption" value={block.caption} onChange={(event) => onChange({ caption: event.target.value })} />
+      <input
+        type="range"
+        min={120}
+        max={1200}
+        value={block.width}
+        onChange={(event) => onChange({ width: Number(event.target.value) })}
+      />
+    </div>
+  );
+}
+
+function TableBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "table" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const columns = block.columns.length ? block.columns : ["Column 1", "Column 2"];
+  const rows = block.rows.length ? block.rows : [["", ""]];
+
+  return (
+    <div className={styles.tableBlockWrap}>
+      <div className={styles.inlineActions}>
+        <button onClick={() => onChange({ rows: [...rows, columns.map(() => "")] })}>+ row</button>
+        <button onClick={() => onChange({ columns: [...columns, `Column ${columns.length + 1}`], rows: rows.map((row) => [...row, ""]) })}>
+          + col
+        </button>
+      </div>
+      <table className={styles.tableBlock}>
+        <thead>
+          <tr>
+            {columns.map((column, columnIndex) => (
+              <th key={columnIndex}>
+                <input
+                  value={column}
+                  onChange={(event) => {
+                    const nextColumns = [...columns];
+                    nextColumns[columnIndex] = event.target.value;
+                    onChange({ columns: nextColumns });
+                  }}
+                />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {columns.map((_, cellIndex) => (
+                <td key={cellIndex}>
+                  <input
+                    value={row[cellIndex] ?? ""}
+                    onChange={(event) => {
+                      const nextRows = rows.map((item) => [...item]);
+                      nextRows[rowIndex]![cellIndex] = event.target.value;
+                      onChange({ rows: nextRows });
+                    }}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ChartBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "chart" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => JSON.stringify(block.series, null, 2));
+  const keys = useMemo(
+    () =>
+      Array.from(
+        new Set(block.series.flatMap((row) => Object.keys(row).filter((key) => key !== "name" && typeof row[key] === "number"))),
+      ),
+    [block.series],
+  );
+
+  return (
+    <div className={styles.chartBlock}>
+      <div className={styles.inlineActions}>
+        <select value={block.chartType} onChange={(event) => onChange({ chartType: event.target.value as typeof block.chartType })}>
+          <option value="line">line</option>
+          <option value="bar">bar</option>
+          <option value="area">area</option>
+          <option value="pie">pie</option>
+        </select>
+        <button onClick={() => setEditing((value) => !value)}>{editing ? "preview" : "data"}</button>
+      </div>
+      {editing ? (
+        <textarea
+          value={draft}
+          spellCheck={false}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            try {
+              const parsed = JSON.parse(draft);
+              if (Array.isArray(parsed)) onChange({ series: parsed });
+            } catch {
+              setDraft(JSON.stringify(block.series, null, 2));
+            }
+          }}
+        />
+      ) : block.series.length && keys.length ? (
+        <ResponsiveContainer width="100%" height={190}>
+          <LineChart data={block.series}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            {keys.map((key) => (
+              <Line key={key} type="monotone" dataKey={key} stroke="#2f80ed" strokeWidth={2} dot={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className={styles.emptyBlock}>No chart data</div>
+      )}
+    </div>
+  );
+}
+
+function CanvasBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "canvas" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const elements = (block.elements as CanvasElement[]).length ? (block.elements as CanvasElement[]) : [];
+  const [dragging, setDragging] = useState<string | null>(null);
+
+  function updateElement(id: string, patch: Partial<CanvasElement>) {
+    onChange({ elements: elements.map((item) => (item.id === id ? { ...item, ...patch } : item)) });
+  }
+
+  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!dragging) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    updateElement(dragging, {
+      x: Math.max(0, Math.round(event.clientX - rect.left - 54)),
+      y: Math.max(0, Math.round(event.clientY - rect.top - 22)),
+    });
+  }
+
+  return (
+    <div className={styles.canvasBlock}>
+      <div className={styles.inlineActions}>
+        <button
+          onClick={() =>
+            onChange({
+              elements: [
+                ...elements,
+                { id: crypto.randomUUID(), x: 24, y: 24 + elements.length * 34, text: "Node" },
+              ],
+            })
+          }
+        >
+          + node
+        </button>
+      </div>
+      <div
+        className={styles.canvasStage}
+        onPointerMove={onPointerMove}
+        onPointerUp={() => setDragging(null)}
+        onPointerLeave={() => setDragging(null)}
+      >
+        {elements.map((item) => (
+          <div
+            key={item.id}
+            className={styles.canvasNode}
+            style={{ left: item.x, top: item.y }}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDragging(item.id);
+            }}
+          >
+            <input value={item.text} onChange={(event) => updateElement(item.id, { text: event.target.value })} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MermaidBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "mermaid" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [html, setHtml] = useState("");
+
+  useEffect(() => {
+    if (editing) return;
+    mermaid.initialize({ startOnLoad: false, theme: "neutral" });
+    void mermaid
+      .render(`mermaid-${block.id.replace(/[^a-z0-9]/gi, "")}`, block.code)
+      .then((result) => setHtml(result.svg))
+      .catch(() => setHtml(""));
+  }, [block.code, block.id, editing]);
+
+  return (
+    <div className={styles.mermaidBlock} onDoubleClick={() => setEditing(true)}>
+      <div className={styles.inlineActions}>
+        <button onClick={() => setEditing((value) => !value)}>{editing ? "preview" : "edit"}</button>
+      </div>
+      {editing ? (
+        <textarea value={block.code} onChange={(event) => onChange({ code: event.target.value })} spellCheck={false} />
+      ) : (
+        <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </div>
+  );
+}
+
+function LatexBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "latex" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const html = katex.renderToString(block.formula || " ", {
+    displayMode: block.display,
+    throwOnError: false,
+  });
+
+  return (
+    <div className={styles.latexBlock} onDoubleClick={() => setEditing(true)}>
+      <div className={styles.inlineActions}>
+        <button onClick={() => setEditing((value) => !value)}>{editing ? "preview" : "edit"}</button>
+      </div>
+      {editing ? (
+        <input value={block.formula} onChange={(event) => onChange({ formula: event.target.value })} />
+      ) : (
+        <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </div>
+  );
+}
+
+function CustomHtmlBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "custom-html" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div className={styles.customHtmlBlock} onDoubleClick={() => setEditing(true)}>
+      <div className={styles.inlineActions}>
+        <button onClick={() => setEditing((value) => !value)}>{editing ? "preview" : "edit"}</button>
+      </div>
+      {editing ? (
+        <textarea value={block.html} onChange={(event) => onChange({ html: event.target.value })} />
+      ) : (
+        <iframe srcDoc={block.html} sandbox={block.sandbox ? "" : undefined} title={block.id} />
+      )}
+    </div>
+  );
+}
+
+function TimelineBlock({
+  block,
+  onChange,
+}: {
+  block: Extract<AtriaBlock, { type: "timeline" }>;
+  onChange(patch: Partial<AtriaBlock>): void;
+}) {
+  return (
+    <div className={styles.timelineBlock}>
+      <div className={styles.inlineActions}>
+        <button
+          onClick={() =>
+            onChange({
+              items: [...block.items, { at: new Date().toISOString().slice(0, 10), title: "", detail: "" }],
+            })
+          }
+        >
+          + item
+        </button>
+      </div>
+      {block.items.map((item, index) => (
+        <div key={index}>
+          <input
+            value={item.at}
+            onChange={(event) => {
+              const items = [...block.items];
+              items[index] = { ...item, at: event.target.value };
+              onChange({ items });
+            }}
+          />
+          <input
+            value={item.title}
+            onChange={(event) => {
+              const items = [...block.items];
+              items[index] = { ...item, title: event.target.value };
+              onChange({ items });
+            }}
+          />
+          <textarea
+            value={item.detail}
+            onChange={(event) => {
+              const items = [...block.items];
+              items[index] = { ...item, detail: event.target.value };
+              onChange({ items });
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}

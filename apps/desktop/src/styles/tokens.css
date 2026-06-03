@@ -2,7 +2,7 @@
   color-scheme: light;
   --atria-rail-width: 48px;
   --atria-tree-width: 322px;
-  --atria-block-width: 148px;
+  --atria-block-width: 132px;
   --atria-bg: #f8f8f7;
   --atria-rail-bg: #f1f1ef;
   --atria-pane-bg: #f6f6f4;
@@ -24,4 +24,3 @@
     sans-serif;
   --atria-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 }
-

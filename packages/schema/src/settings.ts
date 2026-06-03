@@ -9,8 +9,17 @@ export const AiSettingsSchema = z.object({
   language: z.enum(["zh", "en", "mixed"]).default("zh"),
 });
 
+export const RecentFileSchema = z.object({
+  type: z.enum(["page", "artifact", "timeline"]),
+  id: z.string(),
+  title: z.string(),
+  source: z.enum(["human", "ai"]),
+  openedAt: z.string(),
+});
+
 export const AtriaSettingsSchema = z.object({
   workspacePath: z.string().default(""),
+  recentFiles: z.array(RecentFileSchema).default([]),
   ai: AiSettingsSchema.default({}),
   mcp: z
     .object({
@@ -22,4 +31,4 @@ export const AtriaSettingsSchema = z.object({
 
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
 export type AtriaSettings = z.infer<typeof AtriaSettingsSchema>;
-
+export type RecentFile = z.infer<typeof RecentFileSchema>;

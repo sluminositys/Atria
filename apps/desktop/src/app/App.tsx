@@ -1,16 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Blocks,
+  Box,
+  CheckSquare,
+  Code2,
+  FileCode2,
   FileText,
   GitBranch,
   Hash,
+  Image,
+  Info,
+  Minus,
+  PanelTop,
+  Quote,
   Search,
   Settings,
-  Tag,
+  Sigma,
+  Square,
+  Table2,
+  Tags,
 } from "lucide-react";
-import { AtriaBlockType } from "@atria/schema";
-import { workspaceService } from "./workspaceClient";
+import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
+import { loadWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
 import { PageEditor } from "../components/PageEditor";
@@ -21,35 +33,35 @@ const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentT
   { tool: "files", label: "Files", icon: FileText },
   { tool: "search", label: "Search", icon: Search },
   { tool: "graph", label: "Graph", icon: GitBranch },
-  { tool: "tags", label: "Tags", icon: Tag },
+  { tool: "tags", label: "Tags", icon: Tags },
 ];
 
-const blockPalette: Array<{ type: AtriaBlockType; label: string; icon: string }> = [
-  { type: "heading", label: "Heading", icon: "H" },
-  { type: "text", label: "Text", icon: "¶" },
-  { type: "callout", label: "Callout", icon: "i" },
-  { type: "todo", label: "Todo", icon: "☑" },
-  { type: "card", label: "Card", icon: "▤" },
-  { type: "code", label: "Code", icon: "</>" },
-  { type: "image", label: "Image", icon: "▧" },
-  { type: "artifact", label: "Artifact", icon: "□" },
-  { type: "divider", label: "Divider", icon: "—" },
-  { type: "quote", label: "Quote", icon: "❝" },
-  { type: "table", label: "Table", icon: "▦" },
-  { type: "chart", label: "Chart", icon: "↗" },
-  { type: "canvas", label: "Canvas", icon: "◇" },
-  { type: "mermaid", label: "Mermaid", icon: "M" },
-  { type: "latex", label: "LaTeX", icon: "Σ" },
-  { type: "custom-html", label: "HTML", icon: "{}" },
-  { type: "timeline", label: "Timeline", icon: "T" },
-  { type: "metric-card", label: "Metric", icon: "№" },
-  { type: "gallery", label: "Gallery", icon: "▥" },
+const blockPalette: Array<{
+  type: AtriaBlockType;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+}> = [
+  { type: "callout", label: "Callout", icon: Info },
+  { type: "todo", label: "Todo", icon: CheckSquare },
+  { type: "card", label: "Card", icon: PanelTop },
+  { type: "code", label: "Code", icon: Code2 },
+  { type: "image", label: "Image", icon: Image },
+  { type: "artifact", label: "Artifact", icon: Box },
+  { type: "divider", label: "Divider", icon: Minus },
+  { type: "quote", label: "Quote", icon: Quote },
+  { type: "table", label: "Table", icon: Table2 },
+  { type: "chart", label: "Chart", icon: GitBranch },
+  { type: "canvas", label: "Canvas", icon: Square },
+  { type: "mermaid", label: "Mermaid", icon: GitBranch },
+  { type: "latex", label: "LaTeX", icon: Sigma },
+  { type: "custom-html", label: "HTML", icon: Code2 },
+  { type: "timeline", label: "Timeline", icon: Hash },
 ];
 
 export function App() {
   const query = useQuery({
     queryKey: ["workspace"],
-    queryFn: () => workspaceService.getSnapshot(),
+    queryFn: () => loadWorkspace(),
   });
   const {
     activeTool,
@@ -61,7 +73,6 @@ export function App() {
     closeTab,
     openNode,
     addBlock,
-    createPage,
   } = useAtriaStore();
 
   useEffect(() => {
@@ -105,7 +116,14 @@ export function App() {
         </div>
       </aside>
 
-      <aside className={styles.sidePane}>{renderSidePane()}</aside>
+      <aside className={styles.sidePane}>
+        {snapshot ? renderSidePane(snapshot) : (
+          <div className={styles.sideTitle}>
+            <strong>Atria</strong>
+            <span>{query.isLoading ? "Loading" : "No workspace"}</span>
+          </div>
+        )}
+      </aside>
 
       <main className={styles.mainPane}>
         <div className={styles.tabs}>
@@ -116,7 +134,7 @@ export function App() {
                 <small>{tab.source}</small>
               </button>
               <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
-                ×
+                x
               </button>
             </div>
           ))}
@@ -144,43 +162,37 @@ export function App() {
           <span>Blocks</span>
         </div>
         <div className={styles.blockList}>
-          {blockPalette.map((block) => (
-            <button
-              key={block.type}
-              className={styles.blockButton}
-              disabled={activeTab?.type !== "page"}
-              title={block.label}
-              onClick={() => addBlock(block.type)}
-            >
-              <span>{block.icon}</span>
-              <strong>{block.label}</strong>
-            </button>
-          ))}
+          {blockPalette.map((block) => {
+            const Icon = block.icon;
+            return (
+              <button
+                key={block.type}
+                className={styles.blockButton}
+                disabled={activeTab?.type !== "page"}
+                title={block.label}
+                onClick={() => addBlock(block.type)}
+              >
+                <span>
+                  <Icon size={15} />
+                </span>
+                <strong>{block.label}</strong>
+              </button>
+            );
+          })}
         </div>
       </aside>
     </div>
   );
 
-  function renderSidePane() {
-    if (!snapshot || query.isLoading) {
-      return (
-        <div className={styles.sideTitle}>
-          <strong>Atria</strong>
-          <span>Loading</span>
-        </div>
-      );
-    }
-
+  function renderSidePane(current: WorkspaceSnapshot) {
     if (activeTool === "files") {
       return (
         <>
           <div className={styles.sideTitle}>
-            <strong>{snapshot.title}</strong>
-            <span>
-              {snapshot.pages.length} notes · {snapshot.artifacts.length} html
-            </span>
+            <strong>{current.title}</strong>
+            <span>{current.settings.workspacePath}</span>
           </div>
-          <FileTree snapshot={snapshot} />
+          <FileTree snapshot={current} />
         </>
       );
     }
@@ -190,78 +202,14 @@ export function App() {
     }
 
     if (activeTool === "graph") {
-      return (
-        <>
-          <div className={styles.sideTitle}>
-            <strong>Graph</strong>
-            <span>Project links</span>
-          </div>
-          <div className={styles.graphPane}>
-            <GitBranch size={20} />
-            <span>ArchaicSeeker</span>
-            <small>2 pages · 1 artifact</small>
-          </div>
-        </>
-      );
+      return <GraphPane snapshot={current} />;
     }
 
     if (activeTool === "tags") {
-      const tags = Array.from(
-        new Set([...snapshot.pages.flatMap((page) => page.tags), ...snapshot.artifacts.flatMap((artifact) => artifact.tags)]),
-      ).sort();
-      return (
-        <>
-          <div className={styles.sideTitle}>
-            <strong>Tags</strong>
-            <span>{tags.length} tags</span>
-          </div>
-          <div className={styles.tagList}>
-            {tags.map((tag) => (
-              <button key={tag} onClick={() => useAtriaStore.getState().setFilter(tag)}>
-                <Hash size={13} />
-                <span>{tag}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      );
+      return <TagsPane snapshot={current} />;
     }
 
-    return (
-      <>
-        <div className={styles.sideTitle}>
-          <strong>Settings</strong>
-          <span>Local</span>
-        </div>
-        <div className={styles.settingsPane}>
-          <label>
-            <span>AI Provider</span>
-            <select defaultValue={snapshot.settings.ai.provider}>
-              <option value="ollama">Ollama</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <label>
-            <span>Model</span>
-            <input defaultValue={snapshot.settings.ai.model} />
-          </label>
-          <label>
-            <span>Endpoint</span>
-            <input defaultValue={snapshot.settings.ai.endpoint} />
-          </label>
-          <label>
-            <span>Default Behavior</span>
-            <select defaultValue={snapshot.settings.ai.defaultBehavior}>
-              <option value="summarize">Summarize</option>
-              <option value="extract-conclusions">Extract conclusions</option>
-              <option value="draft-page">Draft page</option>
-            </select>
-          </label>
-        </div>
-      </>
-    );
+    return <SettingsPane snapshot={current} onLoaded={setSnapshot} />;
   }
 }
 
@@ -269,29 +217,45 @@ function SearchPane() {
   const { snapshot, filter, setFilter, openNode } = useAtriaStore();
   const pages = snapshot?.pages ?? [];
   const artifacts = snapshot?.artifacts ?? [];
+  const recent = snapshot?.settings.recentFiles ?? [];
   const query = filter.trim().toLowerCase();
-  const results = [
+  const allItems = [
     ...pages.map((item) => ({ type: "page" as const, item })),
     ...artifacts.map((item) => ({ type: "artifact" as const, item })),
-  ].filter(({ item }) => {
+  ];
+  const results = allItems.filter(({ item }) => {
     if (!query) return true;
-    return [item.title, item.id, ...(item.tags ?? [])].join(" ").toLowerCase().includes(query);
+    return [item.title, item.id, "filePath" in item ? item.filePath : "", ...(item.tags ?? [])]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
   });
 
   return (
     <>
       <div className={styles.sideTitle}>
         <strong>Search</strong>
-        <span>{results.length} results</span>
+        <span>{query ? `${results.length} results` : `${recent.length} recent`}</span>
       </div>
       <div className={styles.searchPane}>
         <input value={filter} placeholder="Search" onChange={(event) => setFilter(event.target.value)} />
+        {!query && recent.length > 0 && (
+          <div className={styles.searchGroup}>
+            {recent.map((item) => (
+              <button key={`${item.type}:${item.id}`} onClick={() => openNode(item.type, item.id)}>
+                <FileText size={14} />
+                <strong>{item.title}</strong>
+                <small>{item.source}</small>
+              </button>
+            ))}
+          </div>
+        )}
         <div className={styles.searchResults}>
           {results.map(({ type, item }) => (
             <button key={`${type}:${item.id}`} onClick={() => openNode(type, item.id)}>
-              <span>{type === "artifact" ? "◎" : "□"}</span>
+              {type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
               <strong>{item.title}</strong>
-              <small>{type === "artifact" ? "AI HTML" : "Human note"}</small>
+              <small>{"filePath" in item ? item.filePath : type}</small>
             </button>
           ))}
         </div>
@@ -300,11 +264,133 @@ function SearchPane() {
   );
 }
 
-function countCharacters(page: { blocks: Array<Record<string, unknown>> }): number {
-  return page.blocks
-    .flatMap((block) => Object.values(block))
-    .map((value) => (typeof value === "string" ? value : ""))
-    .join("")
-    .length;
+function GraphPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
+  const folders = snapshot.folders
+    .map((folder) => {
+      const prefix = folder.path ? `${folder.path}/` : "";
+      const pages = snapshot.pages.filter((page) => page.filePath?.startsWith(prefix));
+      const artifacts = snapshot.artifacts.filter((artifact) => artifact.filePath?.startsWith(prefix));
+      return { folder, pages, artifacts };
+    })
+    .filter((item) => item.pages.length || item.artifacts.length)
+    .slice(0, 30);
+
+  return (
+    <>
+      <div className={styles.sideTitle}>
+        <strong>Graph</strong>
+        <span>{folders.length} linked folders</span>
+      </div>
+      <div className={styles.graphList}>
+        {folders.map(({ folder, pages, artifacts }) => (
+          <section key={folder.id}>
+            <strong>{folder.path}</strong>
+            {pages.map((page) => (
+              <button key={page.id} onClick={() => useAtriaStore.getState().openNode("page", page.id)}>
+                <FileText size={13} />
+                <span>{page.title}</span>
+              </button>
+            ))}
+            {artifacts.map((artifact) => (
+              <button key={artifact.id} onClick={() => useAtriaStore.getState().openNode("artifact", artifact.id)}>
+                <FileCode2 size={13} />
+                <span>{artifact.title}</span>
+              </button>
+            ))}
+          </section>
+        ))}
+      </div>
+    </>
+  );
 }
 
+function TagsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
+  const tags = Array.from(
+    [...snapshot.pages, ...snapshot.artifacts].reduce((map, item) => {
+      for (const tag of item.tags ?? []) map.set(tag, (map.get(tag) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  ).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  return (
+    <>
+      <div className={styles.sideTitle}>
+        <strong>Tags</strong>
+        <span>{tags.length} tags</span>
+      </div>
+      <div className={styles.tagList}>
+        {tags.map(([tag, count]) => (
+          <button
+            key={tag}
+            onClick={() => {
+              useAtriaStore.getState().setFilter(tag);
+              useAtriaStore.getState().setActiveTool("search");
+            }}
+          >
+            <Hash size={13} />
+            <span>{tag}</span>
+            <small>{count}</small>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function SettingsPane({
+  snapshot,
+  onLoaded,
+}: {
+  snapshot: WorkspaceSnapshot;
+  onLoaded(snapshot: WorkspaceSnapshot): void;
+}) {
+  const [path, setPath] = useState(snapshot.settings.workspacePath);
+  return (
+    <>
+      <div className={styles.sideTitle}>
+        <strong>Settings</strong>
+        <span>Local</span>
+      </div>
+      <div className={styles.settingsPane}>
+        <label>
+          <span>Workspace</span>
+          <input value={path} onChange={(event) => setPath(event.target.value)} />
+        </label>
+        <button
+          className={styles.settingsButton}
+          onClick={async () => {
+            const next = await loadWorkspace(path);
+            onLoaded(next);
+          }}
+        >
+          Switch
+        </button>
+        <label>
+          <span>AI Provider</span>
+          <select defaultValue={snapshot.settings.ai.provider}>
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label>
+          <span>Model</span>
+          <input defaultValue={snapshot.settings.ai.model} />
+        </label>
+        <label>
+          <span>Endpoint</span>
+          <input defaultValue={snapshot.settings.ai.endpoint} />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function countCharacters(page: { title: string; body?: string; blocks: Array<Record<string, unknown>> }): number {
+  const blockText = page.blocks
+    .flatMap((block) => Object.values(block))
+    .map((value) => (typeof value === "string" ? value : ""))
+    .join("");
+  return `${page.title}${page.body ?? ""}${blockText}`.replace(/<[^>]*>/g, "").length;
+}

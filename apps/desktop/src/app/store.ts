@@ -1,6 +1,19 @@
 import { create } from "zustand";
-import { AtriaBlock, AtriaBlockType, Page, WorkspaceSnapshot } from "@atria/schema";
+import {
+  AtriaBlock,
+  AtriaBlockType,
+  Page,
+  WorkspaceFolder,
+  WorkspaceSnapshot,
+} from "@atria/schema";
 import { createBlock, nowIso, slugify } from "@atria/core";
+import {
+  createDirectory,
+  createPageFilePath,
+  deleteWorkspacePath,
+  importImageDataUrl,
+  saveWorkspace,
+} from "./workspaceClient";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "settings";
 export type TabType = "page" | "artifact" | "timeline";
@@ -25,12 +38,16 @@ interface AtriaState {
   setActiveTool(tool: ActiveTool): void;
   setFilter(filter: string): void;
   setSelectedFolder(folderId: string): void;
+  toggleFolder(folderId: string): void;
   openNode(type: TabType, id: string): void;
   closeTab(key: string): void;
-  createPage(folderId?: string): void;
+  createFolder(parentFolderId?: string | null, name?: string): Promise<void>;
+  deleteFolder(folderId: string): Promise<void>;
+  createPage(folderId?: string, title?: string): Promise<void>;
   updatePage(pageId: string, patch: Partial<Page>): void;
-  deletePage(pageId: string): void;
+  deletePage(pageId: string): Promise<void>;
   addBlock(type: AtriaBlockType): void;
+  addImageFromDataUrl(dataUrl: string): Promise<void>;
   updateBlock(pageId: string, blockId: string, patch: Partial<AtriaBlock>): void;
   deleteBlock(pageId: string, blockId: string): void;
   moveBlock(pageId: string, blockId: string, direction: -1 | 1): void;
@@ -50,6 +67,13 @@ function sourceFor(type: TabType): "human" | "ai" {
   return type === "artifact" ? "ai" : "human";
 }
 
+function persist(snapshot: WorkspaceSnapshot | undefined): void {
+  if (!snapshot) return;
+  void saveWorkspace(snapshot).catch((error) => {
+    console.error("Failed to persist Atria workspace", error);
+  });
+}
+
 function withUpdatedPage(
   snapshot: WorkspaceSnapshot | undefined,
   pageId: string,
@@ -63,11 +87,24 @@ function withUpdatedPage(
   };
 }
 
+function uniquePageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title: string): string {
+  const base = createPageFilePath(snapshot, folderId, title);
+  const used = new Set(snapshot.pages.map((page) => page.filePath).filter(Boolean));
+  if (!used.has(base)) return base;
+  const suffix = crypto.randomUUID().slice(0, 6);
+  return base.replace(/\.atria\.json$/, `-${suffix}.atria.json`);
+}
+
+function folderContains(folder: WorkspaceFolder, path: string | undefined): boolean {
+  if (!folder.path || !path) return false;
+  return path === folder.path || path.startsWith(`${folder.path}/`);
+}
+
 export const useAtriaStore = create<AtriaState>((set, get) => ({
   activeTool: "files",
   activeTabKey: "",
   filter: "",
-  selectedFolderId: "notes",
+  selectedFolderId: "",
   tabs: [],
 
   setSnapshot(snapshot) {
@@ -110,6 +147,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       return {
         snapshot,
         tabs,
+        selectedFolderId: state.selectedFolderId || snapshot.folders[0]?.id || "",
         activeTabKey: tabs.some((tab) => tab.key === state.activeTabKey)
           ? state.activeTabKey
           : (tabs[0]?.key ?? ""),
@@ -129,13 +167,47 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     set({ selectedFolderId: folderId });
   },
 
+  toggleFolder(folderId) {
+    set((state) => {
+      if (!state.snapshot) return state;
+      const snapshot = {
+        ...state.snapshot,
+        folders: state.snapshot.folders.map((folder) =>
+          folder.id === folderId ? { ...folder, expanded: !folder.expanded } : folder,
+        ),
+        updatedAt: nowIso(),
+      };
+      persist(snapshot);
+      return { snapshot };
+    });
+  },
+
   openNode(type, id) {
     const snapshot = get().snapshot;
     if (!snapshot) return;
     const key = nodeKey(type, id);
+    const title = titleFor(snapshot, type, id);
+    const source = sourceFor(type);
+    const openedAt = nowIso();
+
     set((state) => {
       const exists = state.tabs.some((tab) => tab.key === key);
+      const nextSnapshot = state.snapshot
+        ? {
+            ...state.snapshot,
+            settings: {
+              ...state.snapshot.settings,
+              recentFiles: [
+                { type, id, title, source, openedAt },
+                ...(state.snapshot.settings.recentFiles ?? []).filter((item) => !(item.type === type && item.id === id)),
+              ].slice(0, 20),
+            },
+            updatedAt: nowIso(),
+          }
+        : state.snapshot;
+      persist(nextSnapshot);
       return {
+        snapshot: nextSnapshot,
         activeTabKey: key,
         tabs: exists
           ? state.tabs
@@ -145,8 +217,8 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
                 key,
                 type,
                 id,
-                title: titleFor(snapshot, type, id),
-                source: sourceFor(type),
+                title,
+                source,
               },
             ],
       };
@@ -166,34 +238,85 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     });
   },
 
-  createPage(folderId = get().selectedFolderId || "notes") {
+  async createFolder(parentFolderId = get().selectedFolderId || null, name = "New Folder") {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const path = await createDirectory(snapshot, parentFolderId, name);
+    const parent = parentFolderId ? snapshot.folders.find((folder) => folder.id === parentFolderId) : undefined;
+    const folder: WorkspaceFolder = {
+      id: `folder:${path}`,
+      name,
+      path,
+      parentId: parent?.id ?? null,
+      order: Date.now(),
+      expanded: true,
+    };
+    const next = {
+      ...snapshot,
+      folders: [...snapshot.folders.filter((item) => item.id !== folder.id), folder],
+      updatedAt: nowIso(),
+    };
+    set({ snapshot: next, selectedFolderId: folder.id });
+    persist(next);
+  },
+
+  async deleteFolder(folderId) {
+    const snapshot = get().snapshot;
+    const folder = snapshot?.folders.find((item) => item.id === folderId);
+    if (!snapshot || !folder?.path) return;
+    await deleteWorkspacePath(snapshot, folder.path);
+    const next = {
+      ...snapshot,
+      folders: snapshot.folders.filter((item) => !folderContains(folder, item.path)),
+      pages: snapshot.pages.filter((page) => !folderContains(folder, page.filePath)),
+      artifacts: snapshot.artifacts.filter((artifact) => !folderContains(folder, artifact.filePath)),
+      tree: snapshot.tree.filter((item) => !folderContains(folder, item.filePath)),
+      updatedAt: nowIso(),
+    };
+    const tabs = get().tabs.filter((tab) => {
+      if (tab.type === "page") return next.pages.some((page) => page.id === tab.id);
+      if (tab.type === "artifact") return next.artifacts.some((artifact) => artifact.id === tab.id);
+      return true;
+    });
+    set({
+      snapshot: next,
+      tabs,
+      activeTabKey: tabs[0]?.key ?? "",
+      selectedFolderId: next.folders[0]?.id ?? "",
+    });
+    persist(next);
+  },
+
+  async createPage(folderId = get().selectedFolderId || get().snapshot?.folders[0]?.id || "", title = "Untitled") {
     const snapshot = get().snapshot;
     if (!snapshot) return;
     const createdAt = nowIso();
     const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}-note`;
+    const filePath = uniquePageFilePath(snapshot, folderId, title);
     const page: Page = {
       id,
-      title: "Untitled",
+      title,
       source: "human",
       kind: "note",
+      body: "<p></p>",
+      filePath,
       tags: [],
-      blocks: [createBlock("text")],
+      blocks: [],
       createdAt,
       updatedAt: createdAt,
     };
 
-    set({
-      snapshot: {
-        ...snapshot,
-        pages: [...snapshot.pages, page],
-        tree: [
-          ...snapshot.tree,
-          { id: page.id, type: "page", parentId: folderId, order: Date.now() },
-        ],
-        updatedAt: nowIso(),
-      },
-      selectedFolderId: folderId,
-    });
+    const next: WorkspaceSnapshot = {
+      ...snapshot,
+      pages: [...snapshot.pages, page],
+      tree: [
+        ...snapshot.tree,
+        { id: page.id, type: "page", parentId: folderId, filePath, order: Date.now() },
+      ],
+      updatedAt: nowIso(),
+    };
+    set({ snapshot: next, selectedFolderId: folderId });
+    persist(next);
     get().openNode("page", page.id);
   },
 
@@ -203,8 +326,10 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         ...page,
         ...patch,
         id: page.id,
+        source: page.source,
         updatedAt: nowIso(),
       }));
+      persist(snapshot);
       return {
         snapshot,
         tabs: state.tabs.map((tab) =>
@@ -216,61 +341,90 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     });
   },
 
-  deletePage(pageId) {
-    set((state) => {
-      if (!state.snapshot) return state;
-      const snapshot = {
-        ...state.snapshot,
-        pages: state.snapshot.pages.filter((page) => page.id !== pageId),
-        tree: state.snapshot.tree.filter((item) => !(item.type === "page" && item.id === pageId)),
-        updatedAt: nowIso(),
-      };
-      const tabs = state.tabs.filter((tab) => !(tab.type === "page" && tab.id === pageId));
-      return {
-        snapshot,
-        tabs,
-        activeTabKey: tabs.some((tab) => tab.key === state.activeTabKey)
-          ? state.activeTabKey
-          : (tabs[0]?.key ?? ""),
-      };
+  async deletePage(pageId) {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const page = snapshot.pages.find((item) => item.id === pageId);
+    if (page?.filePath) await deleteWorkspacePath(snapshot, page.filePath);
+    const next = {
+      ...snapshot,
+      pages: snapshot.pages.filter((item) => item.id !== pageId),
+      tree: snapshot.tree.filter((item) => !(item.type === "page" && item.id === pageId)),
+      timeline: snapshot.timeline.map((item) => ({
+        ...item,
+        pageIds: item.pageIds.filter((id) => id !== pageId),
+        pageId: item.pageId === pageId ? undefined : item.pageId,
+      })),
+      updatedAt: nowIso(),
+    };
+    const tabs = get().tabs.filter((tab) => !(tab.type === "page" && tab.id === pageId));
+    set({
+      snapshot: next,
+      tabs,
+      activeTabKey: tabs.some((tab) => tab.key === get().activeTabKey)
+        ? get().activeTabKey
+        : (tabs[0]?.key ?? ""),
     });
+    persist(next);
   },
 
   addBlock(type) {
     const active = get().tabs.find((tab) => tab.key === get().activeTabKey);
     if (!active || active.type !== "page") return;
     const block = createBlock(type);
-    set((state) => ({
-      snapshot: withUpdatedPage(state.snapshot, active.id, (page) => ({
+    set((state) => {
+      const snapshot = withUpdatedPage(state.snapshot, active.id, (page) => ({
         ...page,
         blocks: [...page.blocks, block],
-      })),
-    }));
+      }));
+      persist(snapshot);
+      return { snapshot };
+    });
+  },
+
+  async addImageFromDataUrl(dataUrl) {
+    const snapshot = get().snapshot;
+    const active = get().tabs.find((tab) => tab.key === get().activeTabKey);
+    if (!snapshot || !active || active.type !== "page") return;
+    const src = await importImageDataUrl(snapshot, dataUrl);
+    const block = createBlock("image", { src });
+    set((state) => {
+      const next = withUpdatedPage(state.snapshot, active.id, (page) => ({
+        ...page,
+        blocks: [...page.blocks, block],
+      }));
+      persist(next);
+      return { snapshot: next };
+    });
   },
 
   updateBlock(pageId, blockId, patch) {
-    set((state) => ({
-      snapshot: withUpdatedPage(state.snapshot, pageId, (page) => ({
+    set((state) => {
+      const snapshot = withUpdatedPage(state.snapshot, pageId, (page) => ({
         ...page,
         blocks: page.blocks.map((block) =>
           block.id === blockId ? ({ ...block, ...patch, id: block.id, updatedAt: nowIso() } as AtriaBlock) : block,
         ),
-      })),
-    }));
+      }));
+      persist(snapshot);
+      return { snapshot };
+    });
   },
 
   deleteBlock(pageId, blockId) {
-    set((state) => ({
-      snapshot: withUpdatedPage(state.snapshot, pageId, (page) => ({
+    set((state) => {
+      const snapshot = withUpdatedPage(state.snapshot, pageId, (page) => ({
         ...page,
         blocks: page.blocks.filter((block) => block.id !== blockId),
-      })),
-    }));
+      }));
+      persist(snapshot);
+      return { snapshot };
+    });
   },
 
   moveBlock(pageId, blockId, direction) {
-    set((state) => ({
-      snapshot: withUpdatedPage(state.snapshot, pageId, (page) => {
+    set((state) => {
+      const snapshot = withUpdatedPage(state.snapshot, pageId, (page) => {
         const blocks = [...page.blocks];
         const index = blocks.findIndex((block) => block.id === blockId);
         const nextIndex = index + direction;
@@ -278,8 +432,10 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         const [block] = blocks.splice(index, 1);
         blocks.splice(nextIndex, 0, block!);
         return { ...page, blocks };
-      }),
-    }));
+      });
+      persist(snapshot);
+      return { snapshot };
+    });
   },
 }));
 
@@ -290,4 +446,3 @@ export function getActiveTab(state: Pick<AtriaState, "activeTabKey" | "tabs">): 
 export function duplicateSafeSlug(title: string): string {
   return slugify(title, "page");
 }
-

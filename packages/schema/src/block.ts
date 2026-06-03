@@ -50,6 +50,7 @@ export const ImageBlockSchema = BlockBaseSchema.extend({
   type: z.literal("image"),
   src: z.string().default(""),
   caption: z.string().default(""),
+  width: z.number().int().min(120).max(1200).default(640),
 });
 
 export const ArtifactEmbedBlockSchema = BlockBaseSchema.extend({
@@ -162,4 +163,3 @@ export const AtriaBlockTypeSchema = AtriaBlockSchema.options.map((schema) => sch
 export type BlockSource = z.infer<typeof BlockSourceSchema>;
 export type AtriaBlock = z.infer<typeof AtriaBlockSchema>;
 export type AtriaBlockType = AtriaBlock["type"];
-

@@ -41,9 +41,9 @@ export function createBlock(type: AtriaBlock["type"], patch: Partial<AtriaBlock>
     text: { ...base, type: "text", richText: "" },
     callout: { ...base, type: "callout", tone: "info", title: "Note", text: "" },
     todo: { ...base, type: "todo", checked: false, text: "Todo" },
-    card: { ...base, type: "card", title: "Card", text: "" },
+    card: { ...base, type: "card", title: "", text: "" },
     code: { ...base, type: "code", language: "typescript", code: "" },
-    image: { ...base, type: "image", src: "", caption: "" },
+    image: { ...base, type: "image", src: "", caption: "", width: 640 },
     artifact: { ...base, type: "artifact", artifactId: "", note: "", height: 420, collapsed: false },
     divider: { ...base, type: "divider" },
     quote: { ...base, type: "quote", text: "" },
@@ -249,7 +249,8 @@ export class WorkspaceService {
       projectId: input.projectId,
       timelineRef: input.timelineRef,
       tags: input.tags ?? [],
-      blocks: input.blocks ?? [createBlock("text")],
+      body: input.body ?? "",
+      blocks: input.blocks ?? [],
       createdAt,
       updatedAt: createdAt,
     });
@@ -382,4 +383,3 @@ export class WorkspaceService {
     return summary;
   }
 }
-

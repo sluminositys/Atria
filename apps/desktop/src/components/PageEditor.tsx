@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { Artifact, AtriaBlock, Page } from "@atria/schema";
 import { useAtriaStore } from "../app/store";
 import { BlockRenderer } from "./BlockRenderer";
+import { RichTextBlock } from "./RichTextBlock";
 import styles from "../app/App.module.css";
 
 interface PageEditorProps {
@@ -10,7 +11,7 @@ interface PageEditorProps {
 }
 
 export function PageEditor({ page, artifacts }: PageEditorProps) {
-  const { updatePage, deletePage, updateBlock, deleteBlock, moveBlock } = useAtriaStore();
+  const { updatePage, deletePage, updateBlock, deleteBlock, moveBlock, addImageFromDataUrl } = useAtriaStore();
 
   return (
     <article className={styles.page}>
@@ -33,6 +34,16 @@ export function PageEditor({ page, artifacts }: PageEditorProps) {
           }
         />
         <button onClick={() => deletePage(page.id)}>Delete</button>
+      </div>
+      <div className={styles.pageBody}>
+        <RichTextBlock
+          value={page.body}
+          placeholder=""
+          onChange={(body) => updatePage(page.id, { body })}
+          onPasteImage={(dataUrl) => {
+            void addImageFromDataUrl(dataUrl);
+          }}
+        />
       </div>
       <div className={styles.blocks}>
         {page.blocks.map((block, index) => (
@@ -63,4 +74,3 @@ export function PageEditor({ page, artifacts }: PageEditorProps) {
     </article>
   );
 }
-

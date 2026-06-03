@@ -10,6 +10,7 @@ export const WorkspaceNodeTypeSchema = z.enum(["folder", "page", "artifact", "ti
 export const WorkspaceFolderSchema = z.object({
   id: z.string(),
   name: z.string(),
+  path: z.string().optional(),
   parentId: z.string().nullable().default(null),
   order: z.number().default(0),
   expanded: z.boolean().default(true),
@@ -19,6 +20,7 @@ export const WorkspaceTreeItemSchema = z.object({
   id: z.string(),
   type: WorkspaceNodeTypeSchema,
   parentId: z.string().nullable().default(null),
+  filePath: z.string().optional(),
   order: z.number().default(0),
 });
 
@@ -39,4 +41,3 @@ export type WorkspaceFolder = z.infer<typeof WorkspaceFolderSchema>;
 export type WorkspaceTreeItem = z.infer<typeof WorkspaceTreeItemSchema>;
 export type WorkspaceSnapshot = z.infer<typeof WorkspaceSnapshotSchema>;
 export type WorkspaceNodeType = z.infer<typeof WorkspaceNodeTypeSchema>;
-

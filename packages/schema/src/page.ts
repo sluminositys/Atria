@@ -8,6 +8,8 @@ export const PageSchema = z.object({
   title: z.string(),
   source: BlockSourceSchema.default("human"),
   kind: PageKindSchema.default("note"),
+  body: z.string().default(""),
+  filePath: z.string().optional(),
   projectId: z.string().optional(),
   timelineRef: z.string().optional(),
   tags: z.array(z.string()).default([]),
@@ -23,10 +25,11 @@ export const PageCreateInputSchema = PageSchema.omit({
 }).partial({
   id: true,
   kind: true,
+  body: true,
+  filePath: true,
   tags: true,
   blocks: true,
 });
 
 export type Page = z.infer<typeof PageSchema>;
 export type PageCreateInput = z.infer<typeof PageCreateInputSchema>;
-

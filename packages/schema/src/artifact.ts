@@ -10,6 +10,7 @@ export const ArtifactSchema = z.object({
   kind: z.enum(["html", "image", "dataset", "bundle"]).default("html"),
   entryFile: z.string().default("index.html"),
   entryUrl: z.string().optional(),
+  filePath: z.string().optional(),
   projectId: z.string().optional(),
   taskId: z.string().optional(),
   timelineRefs: z.array(z.string()).default([]),
