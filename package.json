@@ -1,0 +1,21 @@
+{
+  "name": "atria",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "description": "A desktop-first HTML artifact workspace for AI-generated reports, block notes, and MCP-native agent integration.",
+  "scripts": {
+    "dev": "pnpm --filter @atria/desktop dev",
+    "desktop": "pnpm --filter @atria/desktop tauri:dev",
+    "build": "pnpm -r --sort build",
+    "typecheck": "pnpm -r --sort typecheck",
+    "test": "pnpm -r --if-present test",
+    "mcp": "pnpm --filter @atria/mcp-server dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.2"
+  }
+}
+

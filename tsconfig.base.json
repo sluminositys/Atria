@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "declaration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@atria/ai": ["packages/ai/src/index.ts"],
+      "@atria/artifact": ["packages/artifact/src/index.ts"],
+      "@atria/core": ["packages/core/src/index.ts"],
+      "@atria/editor": ["packages/editor/src/index.ts"],
+      "@atria/mcp": ["packages/mcp/src/index.ts"],
+      "@atria/schema": ["packages/schema/src/index.ts"],
+      "@atria/ui": ["packages/ui/src/index.ts"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": []
+  }
+}
+

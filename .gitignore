@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-ssr/
+.turbo/
+.vite/
+.DS_Store
+*.local
+*.log
+coverage/
+
+# Tauri / Rust
+target/
+Cargo.lock
+
+# Atria local workspace data
+.atria-runtime/
+workspace/
+
