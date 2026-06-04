@@ -97,7 +97,7 @@ function insertCallout(editor: Editor) {
     .focus()
     .insertContent({
       type: "atriaCallout",
-      attrs: { title: "Note", tone: "info", layout: "normal", align: "left" },
+      attrs: { title: "Note", tone: "info", width: null, layout: "normal", align: "left" },
       content: [{ type: "paragraph" }],
     })
     .run();
@@ -109,24 +109,24 @@ function insertCard(editor: Editor) {
     .focus()
     .insertContent({
       type: "atriaCard",
-      attrs: { title: "Card", layout: "normal", align: "left" },
+      attrs: { title: "Card", width: null, layout: "normal", align: "left" },
       content: [{ type: "paragraph" }],
     })
     .run();
 }
 
 function insertCode(editor: Editor) {
-  editor.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text" }, content: [{ type: "text", text: "" }] }).run();
+  editor.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text", height: 220, layout: "normal", align: "left" }, content: [{ type: "text", text: "" }] }).run();
 }
 
 function insertMermaid(editor: Editor) {
-  editor.chain().focus().insertContent({ type: "atriaMermaid", attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", layout: "wide", align: "center" } }).run();
+  editor.chain().focus().insertContent({ type: "atriaMermaid", attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", width: 760, height: 260, layout: "wide", align: "center" } }).run();
 }
 
 function insertLatex(editor: Editor) {
-  editor.chain().focus().insertContent({ type: "atriaLatex", attrs: { formula: "E = mc^2", display: true, layout: "normal", align: "center" } }).run();
+  editor.chain().focus().insertContent({ type: "atriaLatex", attrs: { formula: "E = mc^2", display: true, width: 520, layout: "normal", align: "center" } }).run();
 }
 
 function insertHtml(editor: Editor) {
-  editor.chain().focus().insertContent({ type: "atriaHtml", attrs: { html: "<section></section>", height: 320, layout: "wide", align: "center" } }).run();
+  editor.chain().focus().insertContent({ type: "atriaHtml", attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" } }).run();
 }

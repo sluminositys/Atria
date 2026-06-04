@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import TextStyle from "@tiptap/extension-text-style";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Table from "@tiptap/extension-table";
@@ -54,10 +56,32 @@ interface SlashState extends SlashMenuState {
 
 const lowlight = createLowlight(common);
 
+const FontSize = Extension.create({
+  name: "fontSize",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["textStyle"],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element) => element.style.fontSize || null,
+            renderHTML: (attributes) => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
 export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
   const editorRef = useRef<Editor | null>(null);
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
 
@@ -190,23 +214,45 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   if (!editor) return null;
 
-  async function insertImageFile(file: File) {
+  async function insertImageFile(file: File): Promise<boolean> {
     const currentEditor = editorRef.current;
-    if (!currentEditor || !snapshot) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    const src = await importImageDataUrl(snapshot, dataUrl);
-    insertImage(src, file.name);
+    setImageInsertError("");
+    try {
+      if (!currentEditor) throw new Error("Editor is not ready.");
+      if (!snapshot?.settings.workspacePath) {
+        throw new Error("Open or create a workspace before inserting a local image.");
+      }
+      const dataUrl = await readFileAsDataUrl(file);
+      const src = await importImageDataUrl(snapshot, dataUrl);
+      return insertImage(src, file.name);
+    } catch (error) {
+      setImageInsertError(error instanceof Error ? error.message : "Image insert failed.");
+      return false;
+    }
   }
 
-  function insertImage(src: string, alt = "") {
-    editorRef.current
-      ?.chain()
+  function insertImage(src: string, alt = ""): boolean {
+    const cleanSrc = src.trim();
+    if (!cleanSrc) {
+      setImageInsertError("Image source is empty.");
+      return false;
+    }
+    const currentEditor = editorRef.current;
+    if (!currentEditor) {
+      setImageInsertError("Editor is not ready.");
+      return false;
+    }
+    currentEditor
+      .chain()
       .focus()
       .insertContent({
         type: "atriaImage",
-        attrs: { src, alt, caption: "", width: 640, layout: "normal", align: "center" },
+        attrs: { src: cleanSrc, alt, caption: "", width: 640, layout: "normal", align: "center" },
       })
       .run();
+    setImageInsertError("");
+    setImageDialogOpen(false);
+    return true;
   }
 
   function insertArtifact(artifact: Artifact) {
@@ -217,6 +263,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         type: "atriaArtifact",
         attrs: {
           artifactId: artifact.id,
+          width: 820,
           height: 420,
           collapsed: false,
           note: "",
@@ -274,7 +321,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         current.chain().focus().toggleBlockquote().run();
         return;
       case "code":
-        current.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text" } }).run();
+        current.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text", height: 220, layout: "normal", align: "left" } }).run();
         return;
       case "callout":
         current
@@ -282,7 +329,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaCallout",
-            attrs: { tone: "info", title: "Note", layout: "normal", align: "left" },
+            attrs: { tone: "info", title: "Note", width: null, layout: "normal", align: "left" },
             content: [{ type: "paragraph" }],
           })
           .run();
@@ -293,7 +340,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaCard",
-            attrs: { title: "Card", layout: "normal", align: "left" },
+            attrs: { title: "Card", width: null, layout: "normal", align: "left" },
             content: [{ type: "paragraph" }],
           })
           .run();
@@ -313,7 +360,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaMermaid",
-            attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", layout: "wide", align: "center" },
+            attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", width: 760, height: 260, layout: "wide", align: "center" },
           })
           .run();
         return;
@@ -323,7 +370,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaLatex",
-            attrs: { formula: "E = mc^2", display: true, layout: "normal", align: "center" },
+            attrs: { formula: "E = mc^2", display: true, width: 520, layout: "normal", align: "center" },
           })
           .run();
         return;
@@ -334,7 +381,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaHtml",
-            attrs: { html: "<section></section>", height: 320, layout: "wide", align: "center" },
+            attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" },
           })
           .run();
         return;
@@ -342,7 +389,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         current
           .chain()
           .focus()
-          .insertContent({ type: "atriaTimeline", attrs: { items: [], layout: "wide", align: "left" } })
+          .insertContent({ type: "atriaTimeline", attrs: { items: [], width: 760, layout: "wide", align: "left" } })
           .run();
         return;
       case "metric":
@@ -352,7 +399,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           .focus()
           .insertContent({
             type: "atriaMetric",
-            attrs: { label: "Metric", value: "0", delta: "", layout: "normal", align: "left" },
+            attrs: { label: "Metric", value: "0", delta: "", width: 240, layout: "normal", align: "left" },
           })
           .run();
         return;
@@ -363,12 +410,14 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
-      <SelectionBubbleMenu
-        editor={editor}
-        onInsertArtifact={() => setArtifactPickerOpen(true)}
-        onInsertImage={() => setImageDialogOpen(true)}
-      />
+      <SelectionBubbleMenu editor={editor} />
       <EditorContent editor={editor} />
+      {imageInsertError && (
+        <div className={styles.editorToast} contentEditable={false}>
+          <span>{imageInsertError}</span>
+          <button onClick={() => setImageInsertError("")}>Dismiss</button>
+        </div>
+      )}
       <EditorContextMenu
         editor={editor}
         state={contextMenu}
@@ -385,9 +434,14 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       />
       <ImageInsertDialog
         open={imageDialogOpen}
-        onClose={() => setImageDialogOpen(false)}
+        error={imageInsertError}
+        onClearError={() => setImageInsertError("")}
+        onClose={() => {
+          setImageDialogOpen(false);
+          setImageInsertError("");
+        }}
         onInsertUrl={insertImage}
-        onInsertFile={(file) => void insertImageFile(file)}
+        onInsertFile={insertImageFile}
       />
     </div>
   );
@@ -407,6 +461,9 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       autolink: true,
       linkOnPaste: true,
     }),
+    TextStyle,
+    FontSize,
+    Highlight.configure({ multicolor: true }),
     TaskList.configure({ HTMLAttributes: { class: styles.documentTaskList } }),
     TaskItem.configure({ nested: true, HTMLAttributes: { class: styles.documentTaskItem } }),
     Table.configure({
@@ -417,6 +474,15 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     TableHeader,
     TableCell,
     CodeBlockLowlight.extend({
+      draggable: true,
+      addAttributes() {
+        return {
+          ...(this.parent?.() ?? {}),
+          width: { default: null },
+          height: { default: null },
+          ...layoutAttributes,
+        };
+      },
       addNodeView() {
         return ReactNodeViewRenderer(CodeBlockNodeView);
       },
@@ -447,6 +513,19 @@ const layoutAttributes = {
   },
 };
 
+const sizeAttributes = {
+  width: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-width"),
+    renderHTML: (attrs: Record<string, unknown>) => (attrs.width ? { "data-width": attrs.width } : {}),
+  },
+  height: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-height"),
+    renderHTML: (attrs: Record<string, unknown>) => (attrs.height ? { "data-height": attrs.height } : {}),
+  },
+};
+
 function createCardNode() {
   return Node.create({
     name: "atriaCard",
@@ -454,9 +533,11 @@ function createCardNode() {
     content: "block+",
     defining: true,
     isolating: true,
+    draggable: true,
     addAttributes() {
       return {
         title: { default: "Card" },
+        ...sizeAttributes,
         ...layoutAttributes,
       };
     },
@@ -479,10 +560,12 @@ function createCalloutNode() {
     content: "block+",
     defining: true,
     isolating: true,
+    draggable: true,
     addAttributes() {
       return {
         title: { default: "Note" },
         tone: { default: "info" },
+        ...sizeAttributes,
         ...layoutAttributes,
       };
     },
@@ -510,6 +593,7 @@ function createImageNode(snapshot?: WorkspaceSnapshot) {
         caption: { default: "" },
         alt: { default: "" },
         width: { default: 640 },
+        height: { default: null },
         ...layoutAttributes,
       };
     },
@@ -534,6 +618,7 @@ function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot)
     addAttributes() {
       return {
         artifactId: { default: "" },
+        width: { default: 820 },
         height: { default: 420 },
         collapsed: { default: false },
         note: { default: "" },
@@ -561,6 +646,8 @@ function createMermaidNode() {
     addAttributes() {
       return {
         code: { default: "graph TD\n  A[Atria] --> B[Artifact]" },
+        width: { default: 760 },
+        height: { default: null },
         ...layoutAttributes,
       };
     },
@@ -586,6 +673,8 @@ function createLatexNode() {
       return {
         formula: { default: "" },
         display: { default: true },
+        width: { default: null },
+        height: { default: null },
         ...layoutAttributes,
       };
     },
@@ -610,6 +699,7 @@ function createHtmlNode() {
     addAttributes() {
       return {
         html: { default: "<section></section>" },
+        width: { default: 820 },
         height: { default: 320 },
         ...layoutAttributes,
       };
@@ -637,6 +727,8 @@ function createMetricNode() {
         label: { default: "Metric" },
         value: { default: "0" },
         delta: { default: "" },
+        width: { default: 240 },
+        height: { default: null },
         ...layoutAttributes,
       };
     },
@@ -661,6 +753,8 @@ function createTimelineNode() {
     addAttributes() {
       return {
         items: { default: [] },
+        width: { default: 760 },
+        height: { default: null },
         ...layoutAttributes,
       };
     },
@@ -686,6 +780,8 @@ function createLegacyNode() {
       return {
         legacyType: { default: "legacy" },
         data: { default: null },
+        width: { default: 640 },
+        height: { default: null },
         ...layoutAttributes,
       };
     },

@@ -108,7 +108,7 @@ export function createPageFilePath(snapshot: WorkspaceSnapshot, folderId: string
 
 export function toFileAssetUrl(path: string | undefined): string {
   if (!path) return "";
-  if (/^(https?:|data:|asset:|file:|\/)/.test(path)) return path;
+  if (/^(https?:|data:|asset:|file:)/.test(path)) return path;
   try {
     return convertFileSrc(path);
   } catch {
@@ -118,10 +118,13 @@ export function toFileAssetUrl(path: string | undefined): string {
 
 export function toWorkspaceFileAssetUrl(snapshot: WorkspaceSnapshot | undefined, path: string | undefined): string {
   if (!path) return "";
-  if (/^(https?:|data:|asset:|file:|\/)/.test(path)) return path;
+  if (/^(https?:|data:|asset:|file:)/.test(path)) return path;
   const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(path);
+  const isUnixAbsolute = path.startsWith("/");
   const absolutePath = isWindowsAbsolute
     ? path
+    : isUnixAbsolute
+      ? path
     : joinNative(snapshot?.settings.workspacePath ?? "", path);
   return toFileAssetUrl(absolutePath);
 }
