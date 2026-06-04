@@ -41,6 +41,7 @@ import {
   MetricNodeView,
   TimelineNodeView,
 } from "./nodes/StructuredNodeViews";
+import { TableInteractionView } from "./interaction/TableInteractionView";
 import styles from "../../app/App.module.css";
 
 interface AtriaDocumentEditorProps {
@@ -466,9 +467,32 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     Highlight.configure({ multicolor: true }),
     TaskList.configure({ HTMLAttributes: { class: styles.documentTaskList } }),
     TaskItem.configure({ nested: true, HTMLAttributes: { class: styles.documentTaskItem } }),
-    Table.configure({
+    Table.extend({
+      draggable: true,
+      addAttributes() {
+        return {
+          ...(this.parent?.() ?? {}),
+          width: {
+            default: null,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-width"),
+            renderHTML: (attrs: Record<string, unknown>) => (attrs.width ? { "data-width": attrs.width } : {}),
+          },
+          layout: {
+            default: "normal",
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-layout") ?? "normal",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-layout": attrs.layout }),
+          },
+          align: {
+            default: "center",
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-align") ?? "center",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": attrs.align }),
+          },
+        };
+      },
+    }).configure({
       resizable: true,
       HTMLAttributes: { class: styles.documentTable },
+      View: TableInteractionView,
     }),
     TableRow,
     TableHeader,

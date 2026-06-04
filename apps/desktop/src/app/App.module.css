@@ -1123,6 +1123,20 @@
   font-size: 14px;
 }
 
+.tableInteractionLayer {
+  width: 100%;
+}
+
+.documentTableSurface {
+  width: 100%;
+  overflow-x: auto;
+  padding: 1px;
+}
+
+.documentTableSurface .documentTable {
+  margin: 0;
+}
+
 .documentTable th,
 .documentTable td {
   min-width: 72px;
@@ -1139,6 +1153,20 @@
 
 .documentTable .selectedCell::after {
   background: rgb(47 128 237 / 10%);
+}
+
+.documentEditorSurface :global(.column-resize-handle) {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: -2px;
+  width: 4px;
+  background: rgb(47 128 237 / 58%);
+  pointer-events: none;
+}
+
+.documentEditorSurface :global(.resize-cursor) {
+  cursor: col-resize;
 }
 
 .nodeInteractionLayer {
@@ -1224,6 +1252,27 @@
 .nodeMoreButton:hover {
   background: #f6f6f4;
   color: #25231f;
+}
+
+.tableDragGlyph {
+  width: 12px;
+  height: 14px;
+  display: block;
+  background:
+    radial-gradient(currentColor 1.2px, transparent 1.2px) 0 0 / 6px 6px,
+    radial-gradient(currentColor 1.2px, transparent 1.2px) 6px 0 / 6px 6px;
+}
+
+.tableMoreGlyph {
+  width: 3px;
+  height: 3px;
+  display: block;
+  color: currentColor;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow:
+    5px 0 0 currentColor,
+    10px 0 0 currentColor;
 }
 
 .nodeMoreMenu {
