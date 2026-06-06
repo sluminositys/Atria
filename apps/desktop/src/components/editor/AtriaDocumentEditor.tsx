@@ -45,10 +45,10 @@ import { TableInteractionView } from "./interaction/TableInteractionView";
 import styles from "../../app/App.module.css";
 
 interface AtriaDocumentEditorProps {
-  value?: AtriaDocumentContent;
+  value?: AtriaDocumentContent | string;
   artifacts: Artifact[];
   snapshot?: WorkspaceSnapshot;
-  onChange(content: AtriaDocumentContent): void;
+  onChange(content: AtriaDocumentContent, html: string): void;
 }
 
 interface SlashState extends SlashMenuState {
@@ -174,7 +174,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         },
       },
       onUpdate({ editor }) {
-        onChange(editor.getJSON() as AtriaDocumentContent);
+        onChange(editor.getJSON() as AtriaDocumentContent, editor.getHTML());
       },
       onSelectionUpdate() {
         setContextMenu(null);
@@ -190,7 +190,11 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   useEffect(() => {
     if (!editor) return;
     const next = value ?? createEmptyDocument();
-    if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) {
+    const changed =
+      typeof next === "string"
+        ? editor.getHTML() !== next
+        : JSON.stringify(editor.getJSON()) !== JSON.stringify(next);
+    if (changed) {
       editor.commands.setContent(next, false);
     }
   }, [editor, value]);
