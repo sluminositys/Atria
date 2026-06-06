@@ -25,6 +25,7 @@ export const DocumentRecordSchema = z.object({
 
 export const RevisionSchema = z.object({
   id: z.string().min(1),
+  transactionId: z.string().min(1),
   documentId: z.string().min(1),
   parentId: z.string().optional(),
   actor: ActorSchema,
