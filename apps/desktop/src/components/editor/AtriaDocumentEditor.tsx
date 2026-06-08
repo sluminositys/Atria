@@ -42,6 +42,7 @@ import {
   TimelineNodeView,
 } from "./nodes/StructuredNodeViews";
 import { TableInteractionView } from "./interaction/TableInteractionView";
+import { StableNodeId } from "./extensions/StableNodeId";
 import styles from "../../app/App.module.css";
 
 interface AtriaDocumentEditorProps {
@@ -454,6 +455,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
 function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
   return [
+    StableNodeId,
     StarterKit.configure({
       codeBlock: false,
       heading: { levels: [1, 2, 3, 4] },
