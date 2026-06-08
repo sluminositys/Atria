@@ -5,6 +5,7 @@ use base64::Engine;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use tauri::tray::TrayIconBuilder;
 
@@ -136,6 +137,23 @@ fn atria_read_text_file(root_path: Option<String>, relative_path: String) -> Res
 }
 
 #[tauri::command]
+fn atria_read_text_prefix(
+  root_path: Option<String>,
+  relative_path: String,
+  max_bytes: usize,
+) -> Result<String, String> {
+  let root = resolve_root(root_path)?;
+  let path = safe_join(&root, &relative_path)?;
+  let file = fs::File::open(path).map_err(|error| error.to_string())?;
+  let mut bytes = Vec::new();
+  file
+    .take(max_bytes.clamp(256, 65_536) as u64)
+    .read_to_end(&mut bytes)
+    .map_err(|error| error.to_string())?;
+  Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[tauri::command]
 fn atria_write_text_file(root_path: Option<String>, relative_path: String, content: String) -> Result<(), String> {
   let root = resolve_root(root_path)?;
   let path = safe_join(&root, &relative_path)?;
@@ -196,6 +214,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       atria_default_workspace_path,
       atria_read_workspace,
+      atria_read_text_prefix,
       atria_write_workspace_snapshot,
       atria_read_text_file,
       atria_write_text_file,

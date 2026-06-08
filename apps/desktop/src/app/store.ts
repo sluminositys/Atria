@@ -88,9 +88,28 @@ function withUpdatedPage(
   updater: (page: Page) => Page,
 ): WorkspaceSnapshot | undefined {
   if (!snapshot) return snapshot;
+  let updatedPage: Page | undefined;
+  const pages = snapshot.pages.map((page) => {
+    if (page.id !== pageId) return page;
+    updatedPage = updater(page);
+    return updatedPage;
+  });
   return {
     ...snapshot,
-    pages: snapshot.pages.map((page) => (page.id === pageId ? updater(page) : page)),
+    pages,
+    documents: updatedPage
+      ? snapshot.documents.map((document) =>
+          document.id === pageId
+            ? {
+                ...document,
+                path: updatedPage!.filePath ?? document.path,
+                title: updatedPage!.title,
+                tags: updatedPage!.tags,
+                updatedAt: updatedPage!.updatedAt,
+              }
+            : document,
+        )
+      : snapshot.documents,
     updatedAt: nowIso(),
   };
 }
@@ -116,7 +135,7 @@ function uniquePageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title
   const used = new Set(snapshot.pages.map((page) => page.filePath).filter(Boolean));
   if (!used.has(base)) return base;
   const suffix = crypto.randomUUID().slice(0, 6);
-  return base.replace(/\.atria\.json$/, `-${suffix}.atria.json`);
+  return base.replace(/\.html$/i, `-${suffix}.html`);
 }
 
 function folderContains(folder: WorkspaceFolder, path: string | undefined): boolean {
@@ -313,6 +332,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       folders: snapshot.folders.filter((item) => !folderContains(folder, item.path)),
       pages: snapshot.pages.filter((page) => !folderContains(folder, page.filePath)),
       artifacts: snapshot.artifacts.filter((artifact) => !folderContains(folder, artifact.filePath)),
+      documents: snapshot.documents.filter((document) => !folderContains(folder, document.path)),
       tree: snapshot.tree.filter((item) => !folderContains(folder, item.filePath)),
       updatedAt: nowIso(),
     };
@@ -344,6 +364,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       source: "human",
       kind: "note",
       content: createEmptyDocument(),
+      html: "<p></p>",
       body: "",
       filePath,
       tags: [],
@@ -355,6 +376,19 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const next: WorkspaceSnapshot = {
       ...snapshot,
       pages: [...snapshot.pages, page],
+      documents: [
+        ...snapshot.documents,
+        {
+          id: page.id,
+          path: filePath,
+          title: page.title,
+          kind: "rich-document",
+          tags: [],
+          createdBy: { id: "local-user", label: "Local user", kind: "human" },
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
       tree: [
         ...snapshot.tree,
         { id: page.id, type: "page", parentId: folderId, filePath, order: Date.now() },
@@ -395,6 +429,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const next = {
       ...snapshot,
       pages: snapshot.pages.filter((item) => item.id !== pageId),
+      documents: snapshot.documents.filter((item) => item.id !== pageId),
       tree: snapshot.tree.filter((item) => !(item.type === "page" && item.id === pageId)),
       timeline: snapshot.timeline.map((item) => ({
         ...item,

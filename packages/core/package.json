@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./document-html": "./src/documentHtml.ts",
+    "./document-transactions": "./src/documentTransactions.ts",
     "./node": "./src/node.ts"
   },
   "scripts": {
@@ -22,4 +24,3 @@
     "vitest": "^3.2.2"
   }
 }
-

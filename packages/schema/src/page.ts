@@ -36,6 +36,7 @@ export const PageSchema = z.object({
   source: BlockSourceSchema.default("human"),
   kind: PageKindSchema.default("note"),
   content: AtriaDocumentContentSchema.optional(),
+  html: z.string().optional(),
   body: z.string().default(""),
   filePath: z.string().optional(),
   projectId: z.string().optional(),

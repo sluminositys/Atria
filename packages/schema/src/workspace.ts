@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ArtifactSchema } from "./artifact";
+import { DocumentRecordSchema } from "./document";
 import { PageSchema } from "./page";
 import { ProjectSchema } from "./project";
 import { AtriaSettingsSchema } from "./settings";
@@ -31,6 +32,7 @@ export const WorkspaceSnapshotSchema = z.object({
   tree: z.array(WorkspaceTreeItemSchema).default([]),
   pages: z.array(PageSchema).default([]),
   artifacts: z.array(ArtifactSchema).default([]),
+  documents: z.array(DocumentRecordSchema).default([]),
   timeline: z.array(TimelineSummarySchema).default([]),
   projects: z.array(ProjectSchema).default([]),
   settings: AtriaSettingsSchema.default({}),

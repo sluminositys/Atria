@@ -2,6 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import {
   Artifact,
   ArtifactSchema,
+  DocumentRecord,
   AtriaBlock,
   AtriaDocumentContent,
   Page,
@@ -12,6 +13,11 @@ import {
   WorkspaceTreeItem,
 } from "@atria/schema";
 import { createDefaultWorkspace, createEmptyDocument, nowIso, slugify } from "@atria/core";
+import {
+  isSemanticDocument,
+  parseSemanticDocument,
+  serializeSemanticDocument,
+} from "@atria/core/document-html";
 
 interface WorkspaceEntry {
   name: string;
@@ -26,7 +32,8 @@ interface WorkspaceReadResult {
   entries: WorkspaceEntry[];
 }
 
-const PAGE_EXTENSION = ".atria.json";
+const LEGACY_PAGE_EXTENSION = ".atria.json";
+const DOCUMENT_EXTENSION = ".html";
 const DEFAULT_WORKSPACE_TITLE = "My Workspace";
 
 export async function getDefaultWorkspacePath(): Promise<string> {
@@ -48,26 +55,35 @@ export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapsho
 }
 
 export async function saveWorkspace(snapshot: WorkspaceSnapshot): Promise<void> {
-  const next = WorkspaceSnapshotSchema.parse({
+  const next = withDocumentRecords(WorkspaceSnapshotSchema.parse({
     ...snapshot,
     updatedAt: nowIso(),
-  });
+  }));
 
   await Promise.all(
     next.pages
       .filter((page) => page.filePath)
-      .map((page) =>
-        invoke("atria_write_text_file", {
+      .map((page) => {
+        const isHtmlDocument = page.filePath?.toLowerCase().endsWith(DOCUMENT_EXTENSION);
+        const content = isHtmlDocument
+          ? serializeSemanticDocument({
+              id: page.id,
+              title: page.title,
+              body: page.html ?? "<p></p>",
+              language: "zh-cn",
+            })
+          : JSON.stringify(PageSchema.parse(page), null, 2);
+        return invoke("atria_write_text_file", {
           rootPath: next.settings.workspacePath,
           relativePath: page.filePath,
-          content: JSON.stringify(PageSchema.parse(page), null, 2),
-        }),
-      ),
+          content,
+        });
+      }),
   );
 
   await invoke("atria_write_workspace_snapshot", {
     rootPath: next.settings.workspacePath,
-    snapshot: next,
+    snapshot: toPersistedSnapshot(next),
   });
 }
 
@@ -102,7 +118,7 @@ export async function importImageDataUrl(snapshot: WorkspaceSnapshot, dataUrl: s
 
 export function createPageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title: string): string {
   const folder = snapshot.folders.find((item) => item.id === folderId);
-  const name = `${slugify(title || "untitled", "note")}${PAGE_EXTENSION}`;
+  const name = `${slugify(title || "untitled", "document")}${DOCUMENT_EXTENSION}`;
   return joinRelative(folder?.path ?? "Notes", name);
 }
 
@@ -167,7 +183,7 @@ function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
     pages: seed.pages.map((page) =>
       normalizePageContent({
         ...page,
-        filePath: pagePaths[page.id] ?? `Notes/${slugify(page.title, "note")}${PAGE_EXTENSION}`,
+        filePath: pagePaths[page.id] ?? `Notes/${slugify(page.title, "note")}${LEGACY_PAGE_EXTENSION}`,
       }),
     ),
     artifacts: seed.artifacts.map((artifact) =>
@@ -241,9 +257,9 @@ async function hydrateWorkspace(
     };
   });
 
-  const pageEntries = fileEntries.filter((entry) => entry.relative_path.endsWith(PAGE_EXTENSION));
-  const pages = await Promise.all(
-    pageEntries.map(async (entry) => {
+  const legacyPageEntries = fileEntries.filter((entry) => entry.relative_path.endsWith(LEGACY_PAGE_EXTENSION));
+  const legacyPages = await Promise.all(
+    legacyPageEntries.map(async (entry) => {
       const content = await invoke<string>("atria_read_text_file", {
         rootPath,
         relativePath: entry.relative_path,
@@ -258,7 +274,52 @@ async function hydrateWorkspace(
   );
 
   const htmlEntries = fileEntries.filter((entry) => entry.relative_path.toLowerCase().endsWith(".html"));
-  const artifacts = htmlEntries.map((entry) => {
+  const knownDocumentPaths = new Set([
+    ...stored.documents.filter((document) => document.kind === "rich-document").map((document) => document.path),
+    ...stored.pages.map((page) => page.filePath).filter((path): path is string => Boolean(path?.endsWith(DOCUMENT_EXTENSION))),
+  ]);
+  const semanticDocumentEntries = await Promise.all(
+    htmlEntries.map(async (entry) => {
+      if (knownDocumentPaths.has(entry.relative_path)) return entry;
+      const prefix = await invoke<string>("atria_read_text_prefix", {
+        rootPath,
+        relativePath: entry.relative_path,
+        maxBytes: 8192,
+      });
+      return isSemanticDocument(prefix) ? entry : undefined;
+    }),
+  ).then((items) => items.filter((item): item is WorkspaceEntry => Boolean(item)));
+  const semanticPaths = new Set(semanticDocumentEntries.map((entry) => entry.relative_path));
+  const documentPages = await Promise.all(
+    semanticDocumentEntries.map(async (entry) => {
+      const content = await invoke<string>("atria_read_text_file", {
+        rootPath,
+        relativePath: entry.relative_path,
+      });
+      const parsed = parseSemanticDocument(content);
+      const record = stored.documents.find((document) => document.path === entry.relative_path);
+      const previous = stored.pages.find((page) => page.id === record?.id || page.filePath === entry.relative_path);
+      const timestamp = previous?.updatedAt ?? record?.updatedAt ?? nowIso();
+      return PageSchema.parse({
+        id: record?.id ?? parsed.id ?? `document-${slugify(entry.relative_path, "html")}`,
+        title: previous?.title ?? record?.title ?? parsed.title,
+        source: record?.createdBy.kind === "agent" ? "ai" : (previous?.source ?? "human"),
+        kind: previous?.kind ?? "note",
+        html: parsed.body,
+        body: "",
+        filePath: entry.relative_path,
+        projectId: previous?.projectId,
+        timelineRef: previous?.timelineRef,
+        tags: record?.tags ?? previous?.tags ?? [],
+        blocks: [],
+        createdAt: previous?.createdAt ?? record?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      });
+    }),
+  );
+  const pages = [...legacyPages, ...documentPages];
+
+  const artifacts = htmlEntries.filter((entry) => !semanticPaths.has(entry.relative_path)).map((entry) => {
     const previous = stored.artifacts.find(
       (artifact) => artifact.filePath === entry.relative_path || artifact.title === entry.name,
     );
@@ -300,7 +361,7 @@ async function hydrateWorkspace(
     })),
   ];
 
-  return WorkspaceSnapshotSchema.parse({
+  return withDocumentRecords(WorkspaceSnapshotSchema.parse({
     ...stored,
     title: stored.title || DEFAULT_WORKSPACE_TITLE,
     settings: {
@@ -313,10 +374,13 @@ async function hydrateWorkspace(
     pages,
     artifacts,
     updatedAt: nowIso(),
-  });
+  }));
 }
 
 function normalizePageContent(page: Page): Page {
+  if (page.html !== undefined) {
+    return PageSchema.parse({ ...page, body: page.body ?? "", blocks: page.blocks ?? [] });
+  }
   if (page.content?.type === "doc") {
     return PageSchema.parse({
       ...page,
@@ -338,6 +402,72 @@ function normalizePageContent(page: Page): Page {
     },
     body: page.body ?? "",
     blocks: page.blocks ?? [],
+  });
+}
+
+function withDocumentRecords(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
+  const previous = new Map(snapshot.documents.map((document) => [document.id, document]));
+  const pageDocuments = snapshot.pages
+    .filter((page) => page.filePath?.toLowerCase().endsWith(DOCUMENT_EXTENSION))
+    .map((page): DocumentRecord => {
+      const existing = previous.get(page.id);
+      return {
+        id: page.id,
+        path: page.filePath!,
+        title: page.title,
+        kind: "rich-document",
+        tags: page.tags,
+        createdBy: existing?.createdBy ?? {
+          id: page.source === "ai" ? "legacy-agent" : "local-user",
+          label: page.source === "ai" ? "Imported agent" : "Local user",
+          kind: page.source === "ai" ? "agent" : "human",
+        },
+        createdAt: page.createdAt,
+        updatedAt: page.updatedAt,
+        currentRevision: existing?.currentRevision,
+      };
+    });
+  const artifactDocuments = snapshot.artifacts
+    .filter((artifact) => artifact.filePath)
+    .map((artifact): DocumentRecord => {
+      const existing = previous.get(artifact.id);
+      return {
+        id: artifact.id,
+        path: artifact.filePath!,
+        title: artifact.title,
+        kind: "html-artifact",
+        tags: artifact.tags,
+        createdBy: existing?.createdBy ?? {
+          id: "imported-agent",
+          label: "Imported agent",
+          kind: "agent",
+        },
+        createdAt: artifact.createdAt,
+        updatedAt: artifact.updatedAt,
+        currentRevision: existing?.currentRevision,
+      };
+    });
+  const activeIds = new Set([...pageDocuments, ...artifactDocuments].map((document) => document.id));
+  return WorkspaceSnapshotSchema.parse({
+    ...snapshot,
+    documents: [
+      ...pageDocuments,
+      ...artifactDocuments,
+      ...snapshot.documents.filter((document) => !activeIds.has(document.id)),
+    ],
+  });
+}
+
+function toPersistedSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
+  return WorkspaceSnapshotSchema.parse({
+    ...snapshot,
+    pages: snapshot.pages.map((page) => ({
+      ...page,
+      content: undefined,
+      html: undefined,
+      body: "",
+      blocks: [],
+    })),
   });
 }
 
