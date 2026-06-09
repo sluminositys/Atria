@@ -226,7 +226,9 @@ fn main() {
       git_history::atria_git_initialize,
       git_history::atria_git_status,
       git_history::atria_git_checkpoint,
-      git_history::atria_git_document_history
+      git_history::atria_git_document_history,
+      git_history::atria_git_document_diff,
+      git_history::atria_git_restore_document
     ])
     .run(tauri::generate_context!())
     .expect("error while running Atria");

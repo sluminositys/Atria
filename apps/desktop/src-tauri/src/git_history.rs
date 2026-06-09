@@ -1,4 +1,4 @@
-use git2::{DiffOptions, IndexAddOption, Repository, Signature, Sort, StatusOptions};
+use git2::{DiffFormat, DiffOptions, IndexAddOption, Oid, Repository, Signature, Sort, StatusOptions};
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
@@ -37,6 +37,17 @@ pub struct GitRevision {
 pub struct GitCheckpointResult {
   revision: GitRevision,
   changed: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDocumentDiff {
+  from_revision: Option<String>,
+  to_revision: Option<String>,
+  patch: String,
+  files_changed: usize,
+  additions: usize,
+  deletions: usize,
 }
 
 #[tauri::command]
@@ -136,6 +147,97 @@ pub fn atria_git_document_history(
     }
   }
   Ok(revisions)
+}
+
+#[tauri::command]
+pub fn atria_git_document_diff(
+  root_path: Option<String>,
+  relative_path: String,
+  from_revision: Option<String>,
+  to_revision: Option<String>,
+) -> Result<GitDocumentDiff, String> {
+  let root = super::resolve_root(root_path)?;
+  let path = normalize_relative_path(&root, &relative_path)?;
+  let repository = Repository::open(root).map_err(|error| error.to_string())?;
+  let old_tree = resolve_tree(&repository, from_revision.as_deref())?;
+  let new_tree = resolve_tree(&repository, to_revision.as_deref())?;
+  let mut options = DiffOptions::new();
+  options.pathspec(&path);
+  let diff = if to_revision.is_some() {
+    repository.diff_tree_to_tree(old_tree.as_ref(), new_tree.as_ref(), Some(&mut options))
+  } else {
+    repository.diff_tree_to_workdir_with_index(old_tree.as_ref(), Some(&mut options))
+  }
+  .map_err(|error| error.to_string())?;
+  let stats = diff.stats().map_err(|error| error.to_string())?;
+  let mut patch = Vec::new();
+  diff
+    .print(DiffFormat::Patch, |_delta, _hunk, line| {
+      if matches!(line.origin(), '+' | '-' | ' ') {
+        patch.push(line.origin() as u8);
+      }
+      patch.extend_from_slice(line.content());
+      true
+    })
+    .map_err(|error| error.to_string())?;
+  Ok(GitDocumentDiff {
+    from_revision,
+    to_revision,
+    patch: String::from_utf8_lossy(&patch).into_owned(),
+    files_changed: stats.files_changed(),
+    additions: stats.insertions(),
+    deletions: stats.deletions(),
+  })
+}
+
+#[tauri::command]
+pub fn atria_git_restore_document(
+  root_path: Option<String>,
+  relative_path: String,
+  revision: String,
+  actor_name: String,
+  actor_email: Option<String>,
+  intent: String,
+  transaction_id: Option<String>,
+) -> Result<GitCheckpointResult, String> {
+  let root = super::resolve_root(root_path)?;
+  let path = normalize_relative_path(&root, &relative_path)?;
+  let repository = Repository::open(&root).map_err(|error| error.to_string())?;
+  let commit = repository
+    .find_commit(parse_oid(&revision)?)
+    .map_err(|error| error.to_string())?;
+  let tree = commit.tree().map_err(|error| error.to_string())?;
+  let target = root.join(Path::new(&path));
+  match tree.get_path(Path::new(&path)) {
+    Ok(entry) => {
+      let object = entry.to_object(&repository).map_err(|error| error.to_string())?;
+      let blob = object
+        .as_blob()
+        .ok_or_else(|| format!("Revision {revision} does not contain a file at {path}"))?;
+      if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+      }
+      fs::write(&target, blob.content()).map_err(|error| error.to_string())?;
+    }
+    Err(error) if error.code() == git2::ErrorCode::NotFound => {
+      if target.exists() {
+        fs::remove_file(&target).map_err(|remove_error| remove_error.to_string())?;
+      }
+    }
+    Err(error) => return Err(error.to_string()),
+  }
+  drop(tree);
+  drop(commit);
+  drop(repository);
+
+  atria_git_checkpoint(
+    Some(root.to_string_lossy().to_string()),
+    vec![path],
+    actor_name,
+    actor_email,
+    intent,
+    transaction_id,
+  )
 }
 
 pub(crate) fn open_or_initialize(root: &Path) -> Result<(Repository, bool), String> {
@@ -252,6 +354,20 @@ fn commit_touches_path(repository: &Repository, commit: &git2::Commit<'_>, path:
     .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut options))
     .map_err(|error| error.to_string())?;
   Ok(diff.deltas().len() > 0)
+}
+
+fn resolve_tree<'repo>(repository: &'repo Repository, revision: Option<&str>) -> Result<Option<git2::Tree<'repo>>, String> {
+  let Some(revision) = revision else {
+    return Ok(None);
+  };
+  let commit = repository
+    .find_commit(parse_oid(revision)?)
+    .map_err(|error| error.to_string())?;
+  commit.tree().map(Some).map_err(|error| error.to_string())
+}
+
+fn parse_oid(value: &str) -> Result<Oid, String> {
+  Oid::from_str(value).map_err(|error| error.to_string())
 }
 
 fn revision_from_commit(commit: &git2::Commit<'_>) -> GitRevision {
@@ -390,6 +506,67 @@ mod tests {
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].transaction_id.as_deref(), Some("transaction-1"));
     assert_eq!(history[0].actor, "Codex");
+
+    fs::remove_dir_all(root).expect("remove test workspace");
+  }
+
+  #[test]
+  fn diffs_and_restores_one_document_without_rewriting_history() {
+    let nonce = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("clock")
+      .as_nanos();
+    let root = std::env::temp_dir().join(format!("atria-restore-test-{}-{nonce}", std::process::id()));
+    fs::create_dir_all(&root).expect("create workspace");
+    fs::write(root.join("note.html"), "<p>Initial</p>").expect("write document");
+    atria_git_initialize(Some(root.to_string_lossy().to_string())).expect("initialize Git");
+    fs::write(root.join("note.html"), "<p>Changed</p>").expect("change document");
+    atria_git_checkpoint(
+      Some(root.to_string_lossy().to_string()),
+      vec!["note.html".to_string()],
+      "Codex".to_string(),
+      None,
+      "Change document".to_string(),
+      Some("transaction-change".to_string()),
+    )
+    .expect("checkpoint document");
+    let history = atria_git_document_history(
+      Some(root.to_string_lossy().to_string()),
+      "note.html".to_string(),
+      20,
+    )
+    .expect("history");
+    let diff = atria_git_document_diff(
+      Some(root.to_string_lossy().to_string()),
+      "note.html".to_string(),
+      Some(history[1].id.clone()),
+      Some(history[0].id.clone()),
+    )
+    .expect("diff");
+    let restored = atria_git_restore_document(
+      Some(root.to_string_lossy().to_string()),
+      "note.html".to_string(),
+      history[1].id.clone(),
+      "Local user".to_string(),
+      None,
+      "Restore initial document".to_string(),
+      Some("transaction-restore".to_string()),
+    )
+    .expect("restore");
+    let restored_history = atria_git_document_history(
+      Some(root.to_string_lossy().to_string()),
+      "note.html".to_string(),
+      20,
+    )
+    .expect("restored history");
+
+    assert!(diff.patch.contains("-<p>Initial</p>"));
+    assert!(diff.patch.contains("+<p>Changed</p>"));
+    assert_eq!(diff.additions, 1);
+    assert_eq!(diff.deletions, 1);
+    assert!(restored.changed);
+    assert_eq!(fs::read_to_string(root.join("note.html")).expect("read restored"), "<p>Initial</p>");
+    assert_eq!(restored_history.len(), 3);
 
     fs::remove_dir_all(root).expect("remove test workspace");
   }
