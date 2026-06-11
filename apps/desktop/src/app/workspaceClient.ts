@@ -66,6 +66,9 @@ export interface GitDocumentDiff {
 const LEGACY_PAGE_EXTENSION = ".atria.json";
 const DOCUMENT_EXTENSION = ".html";
 const DEFAULT_WORKSPACE_TITLE = "My Workspace";
+let queuedSnapshot: WorkspaceSnapshot | undefined;
+let saveDrain: Promise<void> | undefined;
+const checkpointTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export async function getDefaultWorkspacePath(): Promise<string> {
   return invoke<string>("atria_default_workspace_path");
@@ -189,6 +192,51 @@ export async function saveWorkspace(snapshot: WorkspaceSnapshot): Promise<void> 
     rootPath: next.settings.workspacePath,
     snapshot: toPersistedSnapshot(next),
   });
+}
+
+export function queueWorkspaceSave(snapshot: WorkspaceSnapshot): Promise<void> {
+  queuedSnapshot = snapshot;
+  if (!saveDrain) {
+    saveDrain = drainWorkspaceSaves().finally(() => {
+      saveDrain = undefined;
+      if (queuedSnapshot) void queueWorkspaceSave(queuedSnapshot);
+    });
+  }
+  return saveDrain;
+}
+
+export function scheduleDocumentCheckpoint(
+  snapshot: WorkspaceSnapshot,
+  pageId: string,
+  intent: string,
+  delayMs = 1800,
+): void {
+  const page = snapshot.pages.find((item) => item.id === pageId);
+  const rootPath = snapshot.settings.workspacePath;
+  if (!page?.filePath || !rootPath) return;
+  const key = `${rootPath}\n${page.filePath}`;
+  const existing = checkpointTimers.get(key);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    checkpointTimers.delete(key);
+    void queueWorkspaceSave(snapshot)
+      .then(() =>
+        checkpointWorkspacePaths(rootPath, [page.filePath!], intent, {
+          actorName: "Local user",
+          transactionId: crypto.randomUUID(),
+        }),
+      )
+      .catch((error) => console.error("Failed to checkpoint Atria document", error));
+  }, delayMs);
+  checkpointTimers.set(key, timer);
+}
+
+async function drainWorkspaceSaves(): Promise<void> {
+  while (queuedSnapshot) {
+    const snapshot = queuedSnapshot;
+    queuedSnapshot = undefined;
+    await saveWorkspace(snapshot);
+  }
 }
 
 export async function createDirectory(snapshot: WorkspaceSnapshot, parentFolderId: string | null, name: string) {
