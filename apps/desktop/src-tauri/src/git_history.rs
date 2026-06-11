@@ -10,6 +10,7 @@ const ATRIA_GITIGNORE_LINES: &[&str] = &[
   ".atria/locks/",
   ".atria/tmp/",
 ];
+const MAX_HISTORY_TEXT_BYTES: usize = 20 * 1024 * 1024;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,6 +239,35 @@ pub fn atria_git_restore_document(
     intent,
     transaction_id,
   )
+}
+
+#[tauri::command]
+pub fn atria_git_read_document_revision(
+  root_path: Option<String>,
+  relative_path: String,
+  revision: Option<String>,
+) -> Result<String, String> {
+  let root = super::resolve_root(root_path)?;
+  let path = normalize_relative_path(&root, &relative_path)?;
+  let bytes = if let Some(revision) = revision {
+    let repository = Repository::open(&root).map_err(|error| error.to_string())?;
+    let commit = repository
+      .find_commit(parse_oid(&revision)?)
+      .map_err(|error| error.to_string())?;
+    let tree = commit.tree().map_err(|error| error.to_string())?;
+    let entry = tree.get_path(Path::new(&path)).map_err(|error| error.to_string())?;
+    let object = entry.to_object(&repository).map_err(|error| error.to_string())?;
+    let blob = object
+      .as_blob()
+      .ok_or_else(|| format!("Revision {revision} does not contain a text file at {path}"))?;
+    blob.content().to_vec()
+  } else {
+    fs::read(root.join(Path::new(&path))).map_err(|error| error.to_string())?
+  };
+  if bytes.len() > MAX_HISTORY_TEXT_BYTES {
+    return Err(format!("History preview is limited to {} MiB", MAX_HISTORY_TEXT_BYTES / 1024 / 1024));
+  }
+  String::from_utf8(bytes).map_err(|_| "History preview supports UTF-8 text files only".to_string())
 }
 
 pub(crate) fn open_or_initialize(root: &Path) -> Result<(Repository, bool), String> {
@@ -543,6 +573,12 @@ mod tests {
       Some(history[0].id.clone()),
     )
     .expect("diff");
+    let historical_content = atria_git_read_document_revision(
+      Some(root.to_string_lossy().to_string()),
+      "note.html".to_string(),
+      Some(history[1].id.clone()),
+    )
+    .expect("read historical document");
     let restored = atria_git_restore_document(
       Some(root.to_string_lossy().to_string()),
       "note.html".to_string(),
@@ -564,6 +600,7 @@ mod tests {
     assert!(diff.patch.contains("+<p>Changed</p>"));
     assert_eq!(diff.additions, 1);
     assert_eq!(diff.deletions, 1);
+    assert_eq!(historical_content, "<p>Initial</p>");
     assert!(restored.changed);
     assert_eq!(fs::read_to_string(root.join("note.html")).expect("read restored"), "<p>Initial</p>");
     assert_eq!(restored_history.len(), 3);
