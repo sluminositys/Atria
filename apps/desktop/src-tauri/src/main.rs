@@ -9,6 +9,8 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use tauri::tray::TrayIconBuilder;
 
+mod git_history;
+
 #[derive(Serialize)]
 struct WorkspaceEntry {
   name: String,
@@ -220,7 +222,13 @@ fn main() {
       atria_write_text_file,
       atria_create_directory,
       atria_delete_path,
-      atria_write_data_url
+      atria_write_data_url,
+      git_history::atria_git_initialize,
+      git_history::atria_git_status,
+      git_history::atria_git_checkpoint,
+      git_history::atria_git_document_history,
+      git_history::atria_git_document_diff,
+      git_history::atria_git_restore_document
     ])
     .run(tauri::generate_context!())
     .expect("error while running Atria");
