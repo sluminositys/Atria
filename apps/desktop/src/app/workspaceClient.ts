@@ -32,6 +32,37 @@ interface WorkspaceReadResult {
   entries: WorkspaceEntry[];
 }
 
+export interface GitWorkspaceStatus {
+  initialized: boolean;
+  head?: string;
+  branch?: string;
+  dirty: boolean;
+}
+
+export interface GitRevision {
+  id: string;
+  shortId: string;
+  summary: string;
+  actor: string;
+  email: string;
+  timestamp: number;
+  transactionId?: string;
+}
+
+export interface GitCheckpointResult {
+  revision: GitRevision;
+  changed: boolean;
+}
+
+export interface GitDocumentDiff {
+  fromRevision?: string;
+  toRevision?: string;
+  patch: string;
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+}
+
 const LEGACY_PAGE_EXTENSION = ".atria.json";
 const DOCUMENT_EXTENSION = ".html";
 const DEFAULT_WORKSPACE_TITLE = "My Workspace";
@@ -42,16 +73,89 @@ export async function getDefaultWorkspacePath(): Promise<string> {
 
 export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapshot> {
   const firstRead = await invoke<WorkspaceReadResult>("atria_read_workspace", { rootPath });
+  let snapshot: WorkspaceSnapshot;
   if (!firstRead.snapshot) {
     const seed = prepareSeedWorkspace(firstRead.root_path);
     await materializeSeedWorkspace(firstRead.root_path, seed);
     const secondRead = await invoke<WorkspaceReadResult>("atria_read_workspace", {
       rootPath: firstRead.root_path,
     });
-    return hydrateWorkspace(secondRead.snapshot ?? seed, secondRead.entries, secondRead.root_path);
+    snapshot = await hydrateWorkspace(secondRead.snapshot ?? seed, secondRead.entries, secondRead.root_path);
+  } else {
+    snapshot = await hydrateWorkspace(firstRead.snapshot, firstRead.entries, firstRead.root_path);
   }
+  await initializeWorkspaceHistory(snapshot.settings.workspacePath);
+  return snapshot;
+}
 
-  return hydrateWorkspace(firstRead.snapshot, firstRead.entries, firstRead.root_path);
+export async function initializeWorkspaceHistory(rootPath: string): Promise<GitWorkspaceStatus> {
+  return invoke<GitWorkspaceStatus>("atria_git_initialize", { rootPath });
+}
+
+export async function getWorkspaceHistoryStatus(rootPath: string): Promise<GitWorkspaceStatus> {
+  return invoke<GitWorkspaceStatus>("atria_git_status", { rootPath });
+}
+
+export async function checkpointWorkspacePaths(
+  rootPath: string,
+  relativePaths: string[],
+  intent: string,
+  options: { actorName?: string; actorEmail?: string; transactionId?: string } = {},
+): Promise<GitCheckpointResult> {
+  return invoke<GitCheckpointResult>("atria_git_checkpoint", {
+    rootPath,
+    relativePaths,
+    actorName: options.actorName ?? "Local user",
+    actorEmail: options.actorEmail,
+    intent,
+    transactionId: options.transactionId,
+  });
+}
+
+export async function getDocumentHistory(
+  rootPath: string,
+  relativePath: string,
+  limit = 100,
+): Promise<GitRevision[]> {
+  return invoke<GitRevision[]>("atria_git_document_history", { rootPath, relativePath, limit });
+}
+
+export async function getDocumentDiff(
+  rootPath: string,
+  relativePath: string,
+  fromRevision?: string,
+  toRevision?: string,
+): Promise<GitDocumentDiff> {
+  return invoke<GitDocumentDiff>("atria_git_document_diff", {
+    rootPath,
+    relativePath,
+    fromRevision,
+    toRevision,
+  });
+}
+
+export async function readDocumentRevision(
+  rootPath: string,
+  relativePath: string,
+  revision?: string,
+): Promise<string> {
+  return invoke<string>("atria_git_read_document_revision", { rootPath, relativePath, revision });
+}
+
+export async function restoreDocumentRevision(
+  rootPath: string,
+  relativePath: string,
+  revision: string,
+  intent: string,
+): Promise<GitCheckpointResult> {
+  return invoke<GitCheckpointResult>("atria_git_restore_document", {
+    rootPath,
+    relativePath,
+    revision,
+    actorName: "Local user",
+    intent,
+    transactionId: crypto.randomUUID(),
+  });
 }
 
 export async function saveWorkspace(snapshot: WorkspaceSnapshot): Promise<void> {
