@@ -107,7 +107,7 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
         <ToolbarButton label="Table" active={editor.isActive("table")} onMouseDown={(event) => run(event, () => onInsert("table"))}>
           <Table2 size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Formula" active={editor.isActive("atriaLatex")} onMouseDown={(event) => run(event, () => onInsert("latex"))}>
+        <ToolbarButton label="Inline formula" active={editor.isActive("atriaInlineMath")} onMouseDown={(event) => run(event, () => onInsert("inline-math"))}>
           <Sigma size={15} />
         </ToolbarButton>
         <ToolbarButton label="Image" onMouseDown={(event) => run(event, () => onInsert("image"))}>

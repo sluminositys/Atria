@@ -218,6 +218,10 @@ export function MermaidNodeView(props: NodeViewProps) {
   const code = String(props.node.attrs.code ?? "");
 
   useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
+
+  useEffect(() => {
     if (editing) return;
     mermaid.initialize({ startOnLoad: false, theme: "neutral" });
     void mermaid
@@ -264,6 +268,10 @@ export function LatexNodeView(props: NodeViewProps) {
     [display, formula],
   );
 
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
+
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -285,9 +293,52 @@ export function LatexNodeView(props: NodeViewProps) {
   );
 }
 
+export function InlineMathNodeView(props: NodeViewProps) {
+  const [editing, setEditing] = useState(false);
+  const formula = String(props.node.attrs.formula ?? "x");
+  const html = useMemo(
+    () => katex.renderToString(formula || " ", { displayMode: false, throwOnError: false }),
+    [formula],
+  );
+
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
+
+  return (
+    <NodeViewWrapper
+      as="span"
+      className={props.selected ? styles.inlineMathSelected : styles.inlineMath}
+      onDoubleClick={() => setEditing(true)}
+    >
+      {editing ? (
+        <input
+          autoFocus
+          value={formula}
+          aria-label="Inline formula"
+          onChange={(event) => props.updateAttributes({ formula: event.target.value })}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === "Escape") {
+              event.preventDefault();
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <span dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </NodeViewWrapper>
+  );
+}
+
 export function HtmlNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const html = String(props.node.attrs.html ?? "");
+
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer

@@ -28,6 +28,7 @@ export type SlashCommand =
   | "image"
   | "table"
   | "mermaid"
+  | "inline-math"
   | "latex"
   | "html"
   | "timeline"
@@ -65,7 +66,8 @@ const commands: Array<{
   { command: "image", label: "Image", group: "Media", icon: Image },
   { command: "table", label: "Table", group: "Media", icon: Table2 },
   { command: "mermaid", label: "Mermaid", group: "Media", icon: Hash },
-  { command: "latex", label: "LaTeX", group: "Media", icon: Sigma },
+  { command: "inline-math", label: "Inline formula", group: "Media", icon: Sigma },
+  { command: "latex", label: "Display formula", group: "Media", icon: Sigma },
   { command: "html", label: "Custom HTML", group: "Media", icon: Code2 },
 ];
 

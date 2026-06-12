@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
@@ -36,6 +36,7 @@ import {
   CodeBlockNodeView,
   HtmlNodeView,
   ImageNodeView,
+  InlineMathNodeView,
   LatexNodeView,
   LegacyNodeView,
   MermaidNodeView,
@@ -381,6 +382,17 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           })
           .run();
         return;
+      case "inline-math": {
+        const { from, to } = current.state.selection;
+        const selectedFormula = current.state.doc.textBetween(from, to, " ").trim();
+        current
+          .chain()
+          .focus()
+          .deleteSelection()
+          .insertContent({ type: "atriaInlineMath", attrs: { formula: selectedFormula || "x" } })
+          .run();
+        return;
+      }
       case "custom-html":
       case "html":
         current
@@ -524,6 +536,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     createImageNode(snapshot),
     createArtifactNode(artifacts, snapshot),
     createMermaidNode(),
+    createInlineMathNode(),
     createLatexNode(),
     createHtmlNode(),
     createMetricNode(),
@@ -718,6 +731,55 @@ function createLatexNode() {
     },
     addNodeView() {
       return ReactNodeViewRenderer(LatexNodeView);
+    },
+  });
+}
+
+function createInlineMathNode() {
+  return Node.create({
+    name: "atriaInlineMath",
+    group: "inline",
+    inline: true,
+    atom: true,
+    selectable: true,
+    addAttributes() {
+      return {
+        formula: {
+          default: "x",
+          parseHTML: (element: HTMLElement) => element.getAttribute("data-formula") ?? "x",
+          renderHTML: (attrs: Record<string, unknown>) => ({ "data-formula": attrs.formula }),
+        },
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'span[data-atria-node="inline-math"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["span", mergeAttributes(HTMLAttributes, { "data-atria-node": "inline-math" })];
+    },
+    addInputRules() {
+      return [
+        new InputRule({
+          find: /\$([^$\n]+)\$$/,
+          handler: ({ state, range, match }) => {
+            const formula = match[1]?.trim();
+            if (!formula) return null;
+            state.tr.replaceWith(range.from, range.to, this.type.create({ formula }));
+          },
+        }),
+      ];
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-m": () => {
+          const { from, to } = this.editor.state.selection;
+          const formula = this.editor.state.doc.textBetween(from, to, " ").trim() || "x";
+          return this.editor.chain().focus().deleteSelection().insertContent({ type: this.name, attrs: { formula } }).run();
+        },
+      };
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(InlineMathNodeView);
     },
   });
 }

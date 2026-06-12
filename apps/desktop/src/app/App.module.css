@@ -1474,6 +1474,38 @@
   color: #5f6368;
 }
 
+.inlineMath,
+.inlineMathSelected {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  margin: 0 2px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  vertical-align: baseline;
+}
+
+.inlineMathSelected {
+  border-color: #9ec5f8;
+  background: var(--atria-blue-soft);
+}
+
+.inlineMath input,
+.inlineMathSelected input {
+  width: min(280px, 45vw);
+  min-width: 72px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--atria-line);
+  border-radius: 4px;
+  background: white;
+  color: var(--atria-text);
+  font-family: var(--atria-mono);
+  font-size: 13px;
+  outline: none;
+}
+
 .documentTable {
   width: 100%;
   margin: 14px 0;
