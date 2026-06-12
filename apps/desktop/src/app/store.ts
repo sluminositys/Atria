@@ -16,7 +16,7 @@ import {
   scheduleDocumentCheckpoint,
 } from "./workspaceClient";
 
-export type ActiveTool = "files" | "search" | "graph" | "tags" | "settings";
+export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
 export type TabType = "page" | "artifact" | "timeline";
 
 export interface WorkspaceTab {

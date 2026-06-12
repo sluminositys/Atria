@@ -1002,6 +1002,321 @@
   color: var(--atria-muted);
 }
 
+.historySideSummary {
+  width: calc(100% - 24px);
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin: 4px 12px;
+  padding: 10px;
+  border-radius: var(--atria-radius);
+  background: var(--atria-active);
+  color: var(--atria-text);
+}
+
+.historySideSummary span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.historySideSummary strong,
+.historySideSummary small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historySideSummary strong {
+  font-size: 13px;
+}
+
+.historySideSummary small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.historyView {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 58px 54px minmax(0, 1fr);
+  overflow: hidden;
+  background: #fbfbfa;
+}
+
+.historyHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--atria-soft-line);
+  background: white;
+}
+
+.historyHeader > div:first-child {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.historyHeader > div:first-child > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.historyHeader strong,
+.historyHeader small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyHeader strong {
+  color: var(--atria-ink);
+  font-size: 14px;
+}
+
+.historyHeader small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.historyActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.historyActions button {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.historyActions button:first-child {
+  width: 30px;
+  padding: 0;
+}
+
+.historyActions button:hover:not(:disabled) {
+  background: var(--atria-hover);
+}
+
+.historyActions button:disabled {
+  opacity: 0.45;
+}
+
+.historyControls {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 20px minmax(150px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--atria-line);
+}
+
+.historyControls label {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.historyControls select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-text);
+  text-overflow: ellipsis;
+}
+
+.historyMode {
+  height: 32px;
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+}
+
+.historyMode button {
+  min-width: 64px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.historyMode .historyModeActive {
+  background: var(--atria-active);
+  color: var(--atria-ink);
+}
+
+.historyStats {
+  min-width: 72px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  font-family: var(--atria-mono);
+  font-size: 12px;
+}
+
+.diffAdded {
+  color: #16794b;
+}
+
+.diffDeleted {
+  color: #c53b3b;
+}
+
+.sourceDiff {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 16px 0 32px;
+  background: #fcfcfb;
+  color: #30343b;
+  font-family: var(--atria-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.sourceDiff > span {
+  min-width: max-content;
+  display: block;
+  padding: 0 18px;
+  white-space: pre;
+}
+
+.diffLineAdded {
+  background: #eaf8ef;
+  color: #146c43;
+}
+
+.diffLineDeleted {
+  background: #fff0ef;
+  color: #a83232;
+}
+
+.diffLineHunk {
+  background: #eef4ff;
+  color: #315f9d;
+}
+
+.renderedDiff {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  background: var(--atria-line);
+}
+
+.renderedDiff figure {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  margin: 0;
+  overflow: hidden;
+  background: white;
+}
+
+.renderedDiff figcaption {
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 12px;
+  background: #f7f7f5;
+  color: var(--atria-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renderedDiff iframe {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: white;
+}
+
+.historyLoading,
+.historyError {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--atria-muted);
+  font-size: 13px;
+}
+
+.historyError {
+  color: #a83232;
+}
+
+@media (max-width: 1180px) {
+  .historyActions button span {
+    display: none;
+  }
+
+  .historyActions button {
+    width: 30px;
+    padding: 0;
+  }
+
+  .historyControls {
+    grid-template-columns: minmax(120px, 1fr) 16px minmax(120px, 1fr) auto;
+  }
+
+  .historyStats {
+    display: none;
+  }
+
+  .historyControls label {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
 .tagEditor {
   min-width: 0;
   flex: 1;
