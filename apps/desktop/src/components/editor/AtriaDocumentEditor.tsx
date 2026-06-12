@@ -19,6 +19,7 @@ import { createEmptyDocument } from "@atria/core";
 import { importImageDataUrl } from "../../app/workspaceClient";
 import { ArtifactPicker } from "./ArtifactPicker";
 import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
+import { EditorToolbar } from "./EditorToolbar";
 import { ImageInsertDialog } from "./ImageInsertDialog";
 import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
 import {
@@ -416,6 +417,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
+      <EditorToolbar editor={editor} onInsert={insertFromPalette} />
       <SelectionBubbleMenu editor={editor} />
       <EditorContent editor={editor} />
       {imageInsertError && (
