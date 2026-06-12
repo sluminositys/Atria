@@ -9,6 +9,7 @@ import {
   FileText,
   GitBranch,
   Hash,
+  History as HistoryIcon,
   Image,
   Info,
   PanelTop,
@@ -25,6 +26,7 @@ import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
 import { PageEditor } from "../components/PageEditor";
 import { ArtifactPreview } from "../components/ArtifactPreview";
+import { DocumentHistoryView, type HistoryTarget } from "../components/DocumentHistoryView";
 import styles from "./App.module.css";
 
 const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -32,6 +34,7 @@ const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentT
   { tool: "search", label: "Search", icon: Search },
   { tool: "graph", label: "Graph", icon: GitBranch },
   { tool: "tags", label: "Tags", icon: Tags },
+  { tool: "history", label: "History", icon: HistoryIcon },
 ];
 
 const blockPalette: Array<{
@@ -80,6 +83,21 @@ export function App() {
   const activeArtifact =
     activeTab?.type === "artifact"
       ? snapshot?.artifacts.find((artifact) => artifact.id === activeTab.id)
+      : undefined;
+  const historyTarget: HistoryTarget | undefined = activePage?.filePath
+    ? {
+        id: activePage.id,
+        title: activePage.title,
+        path: activePage.filePath,
+        kind: "rich-document",
+      }
+    : activeArtifact?.filePath
+      ? {
+          id: activeArtifact.id,
+          title: activeArtifact.title,
+          path: activeArtifact.filePath,
+          kind: "html-artifact",
+        }
       : undefined;
 
   return (
@@ -136,7 +154,13 @@ export function App() {
         </div>
 
         <section className={styles.documentSurface}>
-          {activePage ? (
+          {activeTool === "history" && historyTarget && snapshot ? (
+            <DocumentHistoryView
+              snapshot={snapshot}
+              target={historyTarget}
+              onRestored={async () => setSnapshot(await loadWorkspace(snapshot.settings.workspacePath))}
+            />
+          ) : activePage ? (
             <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
           ) : activeArtifact ? (
             <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
@@ -146,7 +170,7 @@ export function App() {
         </section>
 
         <footer className={styles.statusBar}>
-          <span>{activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Page"}</span>
+          <span>{activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
           <span>{activePage ? `${countCharacters(activePage)} characters` : activeArtifact?.updatedAt}</span>
           <span>{snapshot?.title}</span>
         </footer>
@@ -164,7 +188,7 @@ export function App() {
               <button
                 key={block.type}
                 className={styles.blockButton}
-                disabled={activeTab?.type !== "page"}
+                disabled={activeTab?.type !== "page" || activeTool === "history"}
                 title={block.label}
                 onClick={() => dispatchInsert(block.type)}
               >
@@ -205,8 +229,32 @@ export function App() {
       return <TagsPane snapshot={current} />;
     }
 
+    if (activeTool === "history") {
+      return <HistoryPane target={historyTarget} />;
+    }
+
     return <SettingsPane snapshot={current} onLoaded={setSnapshot} />;
   }
+}
+
+function HistoryPane({ target }: { target?: HistoryTarget }) {
+  return (
+    <>
+      <div className={styles.sideTitle}>
+        <strong>History</strong>
+        <span>{target ? target.title : "No document selected"}</span>
+      </div>
+      {target && (
+        <div className={styles.historySideSummary}>
+          <HistoryIcon size={16} />
+          <span>
+            <strong>{target.title}</strong>
+            <small>{target.path}</small>
+          </span>
+        </div>
+      )}
+    </>
+  );
 }
 
 function SearchPane() {

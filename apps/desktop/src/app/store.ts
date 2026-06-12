@@ -12,10 +12,11 @@ import {
   createPageFilePath,
   deleteWorkspacePath,
   importImageDataUrl,
-  saveWorkspace,
+  queueWorkspaceSave,
+  scheduleDocumentCheckpoint,
 } from "./workspaceClient";
 
-export type ActiveTool = "files" | "search" | "graph" | "tags" | "settings";
+export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
 export type TabType = "page" | "artifact" | "timeline";
 
 export interface WorkspaceTab {
@@ -77,7 +78,7 @@ function sourceFor(type: TabType): "human" | "ai" {
 
 function persist(snapshot: WorkspaceSnapshot | undefined): void {
   if (!snapshot) return;
-  void saveWorkspace(snapshot).catch((error) => {
+  void queueWorkspaceSave(snapshot).catch((error) => {
     console.error("Failed to persist Atria workspace", error);
   });
 }
@@ -410,6 +411,13 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         updatedAt: nowIso(),
       }));
       persist(snapshot);
+      if (snapshot) {
+        scheduleDocumentCheckpoint(
+          snapshot,
+          pageId,
+          `Edit ${patch.title ?? titleFor(snapshot, "page", pageId)}`,
+        );
+      }
       return {
         snapshot,
         tabs: state.tabs.map((tab) =>
