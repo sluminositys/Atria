@@ -740,70 +740,39 @@
 
 .blockBar {
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-left: 1px solid var(--atria-line);
   background: #fbfbfa;
 }
 
-.blockBarTitle {
-  height: 46px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
-  color: var(--atria-ink);
-  font-size: 13px;
-  font-weight: 650;
-}
-
 .blockList {
   display: grid;
-  gap: 7px;
-  padding: 0 10px 16px;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 5px 16px;
 }
 
 .blockButton {
-  min-width: 0;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 7px;
-  align-items: center;
-  border: 0;
+  place-items: center;
+  border: 1px solid transparent;
   border-radius: var(--atria-radius);
   background: transparent;
   color: #475467;
-  text-align: left;
 }
 
 .blockButton:hover {
-  background: var(--atria-hover);
+  border-color: var(--atria-line);
+  background: white;
+  color: var(--atria-ink);
 }
 
 .blockButton:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-.blockButton span {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--atria-line);
-  border-radius: var(--atria-radius);
-  background: white;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.blockButton strong {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 520;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .searchPane {
