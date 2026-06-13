@@ -1,6 +1,10 @@
 import { useEffect, useReducer, type MouseEvent } from "react";
 import type { Editor } from "@tiptap/react";
 import {
+  BetweenHorizontalEnd,
+  BetweenHorizontalStart,
+  BetweenVerticalEnd,
+  BetweenVerticalStart,
   Bold,
   CheckSquare,
   Code2,
@@ -16,6 +20,9 @@ import {
   Sigma,
   Strikethrough,
   Table2,
+  TableCellsMerge,
+  TableCellsSplit,
+  Trash2,
   Undo2,
 } from "lucide-react";
 import type { AtriaBlockType } from "@atria/schema";
@@ -117,6 +124,49 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
           <Minus size={15} />
         </ToolbarButton>
       </ToolbarGroup>
+
+      {editor.isActive("table") && (
+        <ToolbarGroup>
+          <ToolbarButton label="Insert row above" onMouseDown={(event) => run(event, () => editor.chain().focus().addRowBefore().run())}>
+            <BetweenHorizontalStart size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Insert row below" onMouseDown={(event) => run(event, () => editor.chain().focus().addRowAfter().run())}>
+            <BetweenHorizontalEnd size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Insert column left" onMouseDown={(event) => run(event, () => editor.chain().focus().addColumnBefore().run())}>
+            <BetweenVerticalStart size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Insert column right" onMouseDown={(event) => run(event, () => editor.chain().focus().addColumnAfter().run())}>
+            <BetweenVerticalEnd size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Toggle header row" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleHeaderRow().run())}>
+            <Table2 size={15} />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Merge cells"
+            disabled={!editor.can().mergeCells()}
+            onMouseDown={(event) => run(event, () => editor.chain().focus().mergeCells().run())}
+          >
+            <TableCellsMerge size={15} />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Split cell"
+            disabled={!editor.can().splitCell()}
+            onMouseDown={(event) => run(event, () => editor.chain().focus().splitCell().run())}
+          >
+            <TableCellsSplit size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Delete row" onMouseDown={(event) => run(event, () => editor.chain().focus().deleteRow().run())}>
+            <BetweenHorizontalEnd size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Delete column" onMouseDown={(event) => run(event, () => editor.chain().focus().deleteColumn().run())}>
+            <BetweenVerticalEnd size={15} />
+          </ToolbarButton>
+          <ToolbarButton label="Delete table" onMouseDown={(event) => run(event, () => editor.chain().focus().deleteTable().run())}>
+            <Trash2 size={15} />
+          </ToolbarButton>
+        </ToolbarGroup>
+      )}
     </div>
   );
 }
