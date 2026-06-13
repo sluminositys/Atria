@@ -6,6 +6,7 @@ import mermaid from "mermaid";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
+import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
 import "katex/dist/katex.min.css";
 
@@ -283,7 +284,12 @@ export function LatexNodeView(props: NodeViewProps) {
         <section className={styles.documentRenderNode}>
           <PreviewToggle editing={editing} onToggle={() => setEditing((value) => !value)} />
           {editing ? (
-            <input value={formula} onChange={(event) => props.updateAttributes({ formula: event.target.value })} />
+            <MathSourceInput
+              value={formula}
+              multiline
+              ariaLabel="Display formula"
+              onChange={(value) => props.updateAttributes({ formula: value })}
+            />
           ) : (
             <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
           )}
@@ -312,18 +318,13 @@ export function InlineMathNodeView(props: NodeViewProps) {
       onDoubleClick={() => setEditing(true)}
     >
       {editing ? (
-        <input
+        <MathSourceInput
           autoFocus
           value={formula}
-          aria-label="Inline formula"
-          onChange={(event) => props.updateAttributes({ formula: event.target.value })}
+          ariaLabel="Inline formula"
+          onChange={(value) => props.updateAttributes({ formula: value })}
           onBlur={() => setEditing(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === "Escape") {
-              event.preventDefault();
-              setEditing(false);
-            }
-          }}
+          onExit={() => setEditing(false)}
         />
       ) : (
         <span dangerouslySetInnerHTML={{ __html: html }} />
