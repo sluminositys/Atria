@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Blocks,
   Box,
   CheckSquare,
   Code2,
@@ -177,11 +176,7 @@ export function App() {
       </main>
 
       <aside className={styles.blockBar}>
-        <div className={styles.blockBarTitle}>
-          <Blocks size={15} />
-          <span>Blocks</span>
-        </div>
-        <div className={styles.blockList}>
+        <div className={styles.blockList} aria-label="Insert content">
           {blockPalette.map((block) => {
             const Icon = block.icon;
             return (
@@ -192,10 +187,7 @@ export function App() {
                 title={block.label}
                 onClick={() => dispatchInsert(block.type)}
               >
-                <span>
-                  <Icon size={15} />
-                </span>
-                <strong>{block.label}</strong>
+                <Icon size={17} />
               </button>
             );
           })}

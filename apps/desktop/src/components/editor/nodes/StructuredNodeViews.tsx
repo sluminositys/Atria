@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { ChevronDown, ChevronRight, Copy, ExternalLink, RefreshCcw, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, ExternalLink, ListOrdered, RefreshCcw, RotateCcw, WrapText } from "lucide-react";
 import katex from "katex";
 import mermaid from "mermaid";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
+import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
 import "katex/dist/katex.min.css";
 
@@ -181,6 +182,10 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
 export function CodeBlockNodeView(props: NodeViewProps) {
   const language = String(props.node.attrs.language ?? "text");
   const codeText = props.node.textContent;
+  const lineNumbers = Boolean(props.node.attrs.lineNumbers ?? true);
+  const wrap = Boolean(props.node.attrs.wrap ?? false);
+  const lineNumberRef = useRef<HTMLDivElement | null>(null);
+  const lines = Math.max(1, codeText.split("\n").length);
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -198,13 +203,40 @@ export function CodeBlockNodeView(props: NodeViewProps) {
                 </option>
               ))}
             </select>
-            <button title="Copy code" onClick={() => void navigator.clipboard?.writeText(codeText)}>
-              <Copy size={13} />
-            </button>
+            <span>
+              <button
+                className={lineNumbers ? styles.codeHeaderButtonActive : undefined}
+                title="Toggle line numbers"
+                onClick={() => props.updateAttributes({ lineNumbers: !lineNumbers })}
+              >
+                <ListOrdered size={13} />
+              </button>
+              <button
+                className={wrap ? styles.codeHeaderButtonActive : undefined}
+                title="Toggle line wrapping"
+                onClick={() => props.updateAttributes({ wrap: !wrap })}
+              >
+                <WrapText size={13} />
+              </button>
+              <button title="Copy code" onClick={() => void navigator.clipboard?.writeText(codeText)}>
+                <Copy size={13} />
+              </button>
+            </span>
           </div>
-          <pre>
-            <NodeViewContent as="code" />
-          </pre>
+          <div
+            className={styles.codeBlockBody}
+            data-line-numbers={lineNumbers ? "true" : "false"}
+            data-wrap={wrap ? "true" : "false"}
+          >
+            {lineNumbers && (
+              <div ref={lineNumberRef} className={styles.codeLineNumbers} contentEditable={false} aria-hidden="true">
+                {Array.from({ length: lines }, (_, index) => <span key={index}>{index + 1}</span>)}
+              </div>
+            )}
+            <pre onScroll={(event) => { if (lineNumberRef.current) lineNumberRef.current.scrollTop = event.currentTarget.scrollTop; }}>
+              <NodeViewContent as="code" />
+            </pre>
+          </div>
         </section>
       </DirectManipulationLayer>
     </NodeViewWrapper>
@@ -216,6 +248,10 @@ export function MermaidNodeView(props: NodeViewProps) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const code = String(props.node.attrs.code ?? "");
+
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
 
   useEffect(() => {
     if (editing) return;
@@ -264,6 +300,10 @@ export function LatexNodeView(props: NodeViewProps) {
     [display, formula],
   );
 
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
+
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -275,7 +315,12 @@ export function LatexNodeView(props: NodeViewProps) {
         <section className={styles.documentRenderNode}>
           <PreviewToggle editing={editing} onToggle={() => setEditing((value) => !value)} />
           {editing ? (
-            <input value={formula} onChange={(event) => props.updateAttributes({ formula: event.target.value })} />
+            <MathSourceInput
+              value={formula}
+              multiline
+              ariaLabel="Display formula"
+              onChange={(value) => props.updateAttributes({ formula: value })}
+            />
           ) : (
             <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
           )}
@@ -285,9 +330,47 @@ export function LatexNodeView(props: NodeViewProps) {
   );
 }
 
+export function InlineMathNodeView(props: NodeViewProps) {
+  const [editing, setEditing] = useState(false);
+  const formula = String(props.node.attrs.formula ?? "x");
+  const html = useMemo(
+    () => katex.renderToString(formula || " ", { displayMode: false, throwOnError: false }),
+    [formula],
+  );
+
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
+
+  return (
+    <NodeViewWrapper
+      as="span"
+      className={props.selected ? styles.inlineMathSelected : styles.inlineMath}
+      onDoubleClick={() => setEditing(true)}
+    >
+      {editing ? (
+        <MathSourceInput
+          autoFocus
+          value={formula}
+          ariaLabel="Inline formula"
+          onChange={(value) => props.updateAttributes({ formula: value })}
+          onBlur={() => setEditing(false)}
+          onExit={() => setEditing(false)}
+        />
+      ) : (
+        <span dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </NodeViewWrapper>
+  );
+}
+
 export function HtmlNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const html = String(props.node.attrs.html ?? "");
+
+  useEffect(() => {
+    if (!props.selected) setEditing(false);
+  }, [props.selected]);
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer

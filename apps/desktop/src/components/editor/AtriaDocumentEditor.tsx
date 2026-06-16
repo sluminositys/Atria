@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
@@ -19,6 +19,7 @@ import { createEmptyDocument } from "@atria/core";
 import { importImageDataUrl } from "../../app/workspaceClient";
 import { ArtifactPicker } from "./ArtifactPicker";
 import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
+import { EditorToolbar } from "./EditorToolbar";
 import { ImageInsertDialog } from "./ImageInsertDialog";
 import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
 import {
@@ -35,6 +36,7 @@ import {
   CodeBlockNodeView,
   HtmlNodeView,
   ImageNodeView,
+  InlineMathNodeView,
   LatexNodeView,
   LegacyNodeView,
   MermaidNodeView,
@@ -327,7 +329,21 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         current.chain().focus().toggleBlockquote().run();
         return;
       case "code":
-        current.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text", height: 220, layout: "normal", align: "left" } }).run();
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "codeBlock",
+            attrs: {
+              language: "text",
+              height: 220,
+              lineNumbers: true,
+              wrap: false,
+              layout: "normal",
+              align: "left",
+            },
+          })
+          .run();
         return;
       case "callout":
         current
@@ -380,6 +396,17 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           })
           .run();
         return;
+      case "inline-math": {
+        const { from, to } = current.state.selection;
+        const selectedFormula = current.state.doc.textBetween(from, to, " ").trim();
+        current
+          .chain()
+          .focus()
+          .deleteSelection()
+          .insertContent({ type: "atriaInlineMath", attrs: { formula: selectedFormula || "x" } })
+          .run();
+        return;
+      }
       case "custom-html":
       case "html":
         current
@@ -416,6 +443,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
+      <EditorToolbar editor={editor} onInsert={insertFromPalette} />
       <SelectionBubbleMenu editor={editor} />
       <EditorContent editor={editor} />
       {imageInsertError && (
@@ -510,6 +538,16 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
           ...(this.parent?.() ?? {}),
           width: { default: null },
           height: { default: null },
+          lineNumbers: {
+            default: true,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-line-numbers") !== "false",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-line-numbers": String(attrs.lineNumbers !== false) }),
+          },
+          wrap: {
+            default: false,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-wrap") === "true",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-wrap": String(attrs.wrap === true) }),
+          },
           ...layoutAttributes,
         };
       },
@@ -522,6 +560,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     createImageNode(snapshot),
     createArtifactNode(artifacts, snapshot),
     createMermaidNode(),
+    createInlineMathNode(),
     createLatexNode(),
     createHtmlNode(),
     createMetricNode(),
@@ -716,6 +755,55 @@ function createLatexNode() {
     },
     addNodeView() {
       return ReactNodeViewRenderer(LatexNodeView);
+    },
+  });
+}
+
+function createInlineMathNode() {
+  return Node.create({
+    name: "atriaInlineMath",
+    group: "inline",
+    inline: true,
+    atom: true,
+    selectable: true,
+    addAttributes() {
+      return {
+        formula: {
+          default: "x",
+          parseHTML: (element: HTMLElement) => element.getAttribute("data-formula") ?? "x",
+          renderHTML: (attrs: Record<string, unknown>) => ({ "data-formula": attrs.formula }),
+        },
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'span[data-atria-node="inline-math"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["span", mergeAttributes(HTMLAttributes, { "data-atria-node": "inline-math" })];
+    },
+    addInputRules() {
+      return [
+        new InputRule({
+          find: /\$([^$\n]+)\$$/,
+          handler: ({ state, range, match }) => {
+            const formula = match[1]?.trim();
+            if (!formula) return null;
+            state.tr.replaceWith(range.from, range.to, this.type.create({ formula }));
+          },
+        }),
+      ];
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-m": () => {
+          const { from, to } = this.editor.state.selection;
+          const formula = this.editor.state.doc.textBetween(from, to, " ").trim() || "x";
+          return this.editor.chain().focus().deleteSelection().insertContent({ type: this.name, attrs: { formula } }).run();
+        },
+      };
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(InlineMathNodeView);
     },
   });
 }
