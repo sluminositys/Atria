@@ -12,6 +12,7 @@ import {
   Image,
   Info,
   PanelTop,
+  PenTool,
   Quote,
   Search,
   Settings,
@@ -37,7 +38,7 @@ const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentT
 ];
 
 const blockPalette: Array<{
-  type: AtriaBlockType;
+  type: AtriaBlockType | "drawing";
   label: string;
   icon: React.ComponentType<{ size?: number }>;
 }> = [
@@ -52,6 +53,7 @@ const blockPalette: Array<{
   { type: "mermaid", label: "Mermaid", icon: GitBranch },
   { type: "latex", label: "LaTeX", icon: Sigma },
   { type: "custom-html", label: "HTML", icon: Code2 },
+  { type: "drawing", label: "Drawing", icon: PenTool },
   { type: "timeline", label: "Timeline", icon: Hash },
   { type: "metric-card", label: "Metric", icon: Hash },
 ];
@@ -423,7 +425,7 @@ function SettingsPane({
   );
 }
 
-function dispatchInsert(type: AtriaBlockType): void {
+function dispatchInsert(type: AtriaBlockType | "drawing"): void {
   window.dispatchEvent(new CustomEvent("atria:insert-node", { detail: { type } }));
 }
 

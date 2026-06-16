@@ -2289,6 +2289,133 @@
   line-height: 1.6;
 }
 
+.drawingNode {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--atria-line);
+  border-radius: 8px;
+  background-color: #fcfcfb;
+  background-image:
+    linear-gradient(#ececea 1px, transparent 1px),
+    linear-gradient(90deg, #ececea 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.drawingToolbar {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  left: 50%;
+  max-width: calc(100% - 20px);
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 6px 20px rgb(16 24 40 / 10%);
+  transform: translateX(-50%);
+  scrollbar-width: none;
+}
+
+.drawingToolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.drawingToolbar > span {
+  width: 1px;
+  min-width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--atria-soft-line);
+}
+
+.drawingTool,
+.drawingToolActive {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: #535862;
+}
+
+.drawingTool:hover,
+.drawingToolActive {
+  background: var(--atria-active);
+  color: var(--atria-ink);
+}
+
+.drawingTool:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.drawingToolbar input[type="color"] {
+  width: 25px;
+  min-width: 25px;
+  height: 25px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+}
+
+.drawingToolbar input[type="range"] {
+  width: 62px;
+  min-width: 62px;
+  accent-color: #475467;
+}
+
+.drawingTextInput {
+  width: 104px;
+  min-width: 72px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--atria-line);
+  border-radius: 4px;
+  color: var(--atria-text);
+  outline: none;
+}
+
+.drawingSurface,
+.drawingSurfaceEditing {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+.drawingSurface {
+  pointer-events: none;
+}
+
+.drawingSurfaceEditing {
+  cursor: crosshair;
+}
+
+.drawingSelection {
+  fill: transparent;
+  stroke: var(--atria-blue);
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .previewToggle {
   display: flex;
   justify-content: flex-end;

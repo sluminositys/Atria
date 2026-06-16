@@ -20,6 +20,7 @@ const stableNodeTypes = [
   "atriaMermaid",
   "atriaLatex",
   "atriaHtml",
+  "atriaDrawing",
   "atriaMetric",
   "atriaTimeline",
   "atriaLegacy",
