@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { ChevronDown, ChevronRight, Copy, ExternalLink, RefreshCcw, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, ExternalLink, ListOrdered, RefreshCcw, RotateCcw, WrapText } from "lucide-react";
 import katex from "katex";
 import mermaid from "mermaid";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
@@ -182,6 +182,10 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
 export function CodeBlockNodeView(props: NodeViewProps) {
   const language = String(props.node.attrs.language ?? "text");
   const codeText = props.node.textContent;
+  const lineNumbers = Boolean(props.node.attrs.lineNumbers ?? true);
+  const wrap = Boolean(props.node.attrs.wrap ?? false);
+  const lineNumberRef = useRef<HTMLDivElement | null>(null);
+  const lines = Math.max(1, codeText.split("\n").length);
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -199,13 +203,40 @@ export function CodeBlockNodeView(props: NodeViewProps) {
                 </option>
               ))}
             </select>
-            <button title="Copy code" onClick={() => void navigator.clipboard?.writeText(codeText)}>
-              <Copy size={13} />
-            </button>
+            <span>
+              <button
+                className={lineNumbers ? styles.codeHeaderButtonActive : undefined}
+                title="Toggle line numbers"
+                onClick={() => props.updateAttributes({ lineNumbers: !lineNumbers })}
+              >
+                <ListOrdered size={13} />
+              </button>
+              <button
+                className={wrap ? styles.codeHeaderButtonActive : undefined}
+                title="Toggle line wrapping"
+                onClick={() => props.updateAttributes({ wrap: !wrap })}
+              >
+                <WrapText size={13} />
+              </button>
+              <button title="Copy code" onClick={() => void navigator.clipboard?.writeText(codeText)}>
+                <Copy size={13} />
+              </button>
+            </span>
           </div>
-          <pre>
-            <NodeViewContent as="code" />
-          </pre>
+          <div
+            className={styles.codeBlockBody}
+            data-line-numbers={lineNumbers ? "true" : "false"}
+            data-wrap={wrap ? "true" : "false"}
+          >
+            {lineNumbers && (
+              <div ref={lineNumberRef} className={styles.codeLineNumbers} contentEditable={false} aria-hidden="true">
+                {Array.from({ length: lines }, (_, index) => <span key={index}>{index + 1}</span>)}
+              </div>
+            )}
+            <pre onScroll={(event) => { if (lineNumberRef.current) lineNumberRef.current.scrollTop = event.currentTarget.scrollTop; }}>
+              <NodeViewContent as="code" />
+            </pre>
+          </div>
         </section>
       </DirectManipulationLayer>
     </NodeViewWrapper>

@@ -329,7 +329,21 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         current.chain().focus().toggleBlockquote().run();
         return;
       case "code":
-        current.chain().focus().insertContent({ type: "codeBlock", attrs: { language: "text", height: 220, layout: "normal", align: "left" } }).run();
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "codeBlock",
+            attrs: {
+              language: "text",
+              height: 220,
+              lineNumbers: true,
+              wrap: false,
+              layout: "normal",
+              align: "left",
+            },
+          })
+          .run();
         return;
       case "callout":
         current
@@ -524,6 +538,16 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
           ...(this.parent?.() ?? {}),
           width: { default: null },
           height: { default: null },
+          lineNumbers: {
+            default: true,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-line-numbers") !== "false",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-line-numbers": String(attrs.lineNumbers !== false) }),
+          },
+          wrap: {
+            default: false,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-wrap") === "true",
+            renderHTML: (attrs: Record<string, unknown>) => ({ "data-wrap": String(attrs.wrap === true) }),
+          },
           ...layoutAttributes,
         };
       },
