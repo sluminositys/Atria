@@ -45,6 +45,7 @@ import {
 } from "./nodes/StructuredNodeViews";
 import { TableInteractionView } from "./interaction/TableInteractionView";
 import { StableNodeId } from "./extensions/StableNodeId";
+import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import styles from "../../app/App.module.css";
 
 interface AtriaDocumentEditorProps {
@@ -418,6 +419,16 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           })
           .run();
         return;
+      case "drawing":
+        current
+          .chain()
+          .focus()
+          .insertContent({
+            type: "atriaDrawing",
+            attrs: { scene: [], width: 820, height: 480, layout: "wide", align: "center" },
+          })
+          .run();
+        return;
       case "timeline":
         current
           .chain()
@@ -563,6 +574,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     createInlineMathNode(),
     createLatexNode(),
     createHtmlNode(),
+    createDrawingNode(),
     createMetricNode(),
     createTimelineNode(),
     createLegacyNode(),
@@ -858,6 +870,41 @@ function createMetricNode() {
     },
     addNodeView() {
       return ReactNodeViewRenderer(MetricNodeView);
+    },
+  });
+}
+
+function createDrawingNode() {
+  return Node.create({
+    name: "atriaDrawing",
+    group: "block",
+    atom: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        scene: {
+          default: [],
+          parseHTML: (element: HTMLElement) => {
+            try {
+              return JSON.parse(element.getAttribute("data-scene") ?? "[]");
+            } catch {
+              return [];
+            }
+          },
+          renderHTML: (attrs: Record<string, unknown>) => ({ "data-scene": JSON.stringify(attrs.scene ?? []) }),
+        },
+        ...sizeAttributes,
+        ...layoutAttributes,
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'section[data-atria-node="drawing"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["section", mergeAttributes(HTMLAttributes, { "data-atria-node": "drawing" })];
+    },
+    addNodeView() {
+      return ReactNodeViewRenderer(DrawingNodeView);
     },
   });
 }

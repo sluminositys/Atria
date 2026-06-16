@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   CheckSquare,
   Code2,
+  PenTool,
   FileCode2,
   FileText,
   Hash,
@@ -31,6 +32,7 @@ export type SlashCommand =
   | "inline-math"
   | "latex"
   | "html"
+  | "drawing"
   | "timeline"
   | "metric";
 
@@ -69,6 +71,7 @@ const commands: Array<{
   { command: "inline-math", label: "Inline formula", group: "Media", icon: Sigma },
   { command: "latex", label: "Display formula", group: "Media", icon: Sigma },
   { command: "html", label: "Custom HTML", group: "Media", icon: Code2 },
+  { command: "drawing", label: "Drawing", group: "Media", icon: PenTool },
 ];
 
 export function slashCommandCount(): number {
