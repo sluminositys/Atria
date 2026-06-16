@@ -10,3 +10,4 @@ export function normalizeMarkdownInput(value: string): string {
 }
 
 export * from "./mathInput";
+export * from "./drawingScene";
