@@ -83,6 +83,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^2.27.2
         version: 2.27.2
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
       katex:
         specifier: ^0.16.22
         version: 0.16.47
