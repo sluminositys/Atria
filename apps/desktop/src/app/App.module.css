@@ -263,6 +263,29 @@
   background: white;
 }
 
+.viewLoading {
+  width: min(760px, calc(100% - 96px));
+  height: 4px;
+  margin: 52px auto 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--atria-soft-line);
+}
+
+.viewLoading::after {
+  width: 34%;
+  height: 100%;
+  display: block;
+  background: #c9c9c5;
+  content: "";
+  animation: atria-loading 900ms ease-in-out infinite alternate;
+}
+
+@keyframes atria-loading {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(295%); }
+}
+
 .page {
   width: min(760px, calc(100% - 96px));
   min-height: 100%;

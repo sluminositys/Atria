@@ -13,7 +13,16 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { common, createLowlight } from "lowlight";
+import { createLowlight } from "lowlight";
+import bash from "highlight.js/lib/languages/bash";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import plaintext from "highlight.js/lib/languages/plaintext";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import typescript from "highlight.js/lib/languages/typescript";
+import yaml from "highlight.js/lib/languages/yaml";
 import type { Artifact, AtriaBlockType, AtriaDocumentContent, WorkspaceSnapshot } from "@atria/schema";
 import { createEmptyDocument } from "@atria/core";
 import { importImageDataUrl } from "../../app/workspaceClient";
@@ -59,7 +68,18 @@ interface SlashState extends SlashMenuState {
   range: { from: number; to: number };
 }
 
-const lowlight = createLowlight(common);
+const lowlight = createLowlight();
+lowlight.register({
+  text: plaintext,
+  bash,
+  python,
+  javascript,
+  typescript,
+  json,
+  yaml,
+  rust,
+  markdown,
+});
 
 const FontSize = Extension.create({
   name: "fontSize",

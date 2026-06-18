@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -24,10 +24,12 @@ import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
 import { loadWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
-import { PageEditor } from "../components/PageEditor";
-import { ArtifactPreview } from "../components/ArtifactPreview";
-import { DocumentHistoryView, type HistoryTarget } from "../components/DocumentHistoryView";
+import type { HistoryTarget } from "../components/DocumentHistoryView";
 import styles from "./App.module.css";
+
+const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
+const ArtifactPreview = lazy(() => import("../components/ArtifactPreview").then((module) => ({ default: module.ArtifactPreview })));
+const DocumentHistoryView = lazy(() => import("../components/DocumentHistoryView").then((module) => ({ default: module.DocumentHistoryView })));
 
 const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { tool: "files", label: "Files", icon: FileText },
@@ -155,19 +157,21 @@ export function App() {
         </div>
 
         <section className={styles.documentSurface}>
-          {activeTool === "history" && historyTarget && snapshot ? (
-            <DocumentHistoryView
-              snapshot={snapshot}
-              target={historyTarget}
-              onRestored={async () => setSnapshot(await loadWorkspace(snapshot.settings.workspacePath))}
-            />
-          ) : activePage ? (
-            <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
-          ) : activeArtifact ? (
-            <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
-          ) : (
-            <div className={styles.emptyState}>No file selected</div>
-          )}
+          <Suspense fallback={<div className={styles.viewLoading} aria-busy="true" />}>
+            {activeTool === "history" && historyTarget && snapshot ? (
+              <DocumentHistoryView
+                snapshot={snapshot}
+                target={historyTarget}
+                onRestored={async () => setSnapshot(await loadWorkspace(snapshot.settings.workspacePath))}
+              />
+            ) : activePage ? (
+              <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
+            ) : activeArtifact ? (
+              <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
+            ) : (
+              <div className={styles.emptyState}>No file selected</div>
+            )}
+          </Suspense>
         </section>
 
         <footer className={styles.statusBar}>

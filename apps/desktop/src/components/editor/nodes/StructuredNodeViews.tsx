@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { ChevronDown, ChevronRight, Copy, ExternalLink, ListOrdered, RefreshCcw, RotateCcw, WrapText } from "lucide-react";
-import katex from "katex";
-import mermaid from "mermaid";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
-import "katex/dist/katex.min.css";
 
 type ArtifactNodeViewProps = NodeViewProps & {
   artifacts: Artifact[];
@@ -255,18 +252,26 @@ export function MermaidNodeView(props: NodeViewProps) {
 
   useEffect(() => {
     if (editing) return;
-    mermaid.initialize({ startOnLoad: false, theme: "neutral" });
-    void mermaid
-      .render(`atria-mermaid-${props.node.attrs.id ?? Math.random().toString(36).slice(2)}`, code || "graph TD\n  A[Atria] --> B[Artifact]")
-      .then((result) => {
-        setHtml(result.svg);
+    let active = true;
+    void import("../renderers/mermaidRenderer")
+      .then(({ renderMermaid }) => renderMermaid(
+        `atria-mermaid-${props.node.attrs.atriaId ?? Math.random().toString(36).slice(2)}`,
+        code,
+      ))
+      .then((svg) => {
+        if (!active) return;
+        setHtml(svg);
         setError("");
       })
       .catch((reason: unknown) => {
+        if (!active) return;
         setHtml("");
         setError(reason instanceof Error ? reason.message : "Mermaid render failed");
       });
-  }, [code, editing, props.node.attrs.id]);
+    return () => {
+      active = false;
+    };
+  }, [code, editing, props.node.attrs.atriaId]);
 
   return (
     <NodeViewWrapper>
@@ -295,10 +300,7 @@ export function LatexNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const formula = String(props.node.attrs.formula ?? "");
   const display = Boolean(props.node.attrs.display ?? true);
-  const html = useMemo(
-    () => katex.renderToString(formula || " ", { displayMode: display, throwOnError: false }),
-    [display, formula],
-  );
+  const html = useLatexHtml(formula, display);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
@@ -333,10 +335,7 @@ export function LatexNodeView(props: NodeViewProps) {
 export function InlineMathNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const formula = String(props.node.attrs.formula ?? "x");
-  const html = useMemo(
-    () => katex.renderToString(formula || " ", { displayMode: false, throwOnError: false }),
-    [formula],
-  );
+  const html = useLatexHtml(formula, false);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
@@ -502,4 +501,18 @@ function PreviewToggle({ editing, onToggle }: { editing: boolean; onToggle(): vo
       <button onClick={onToggle}>{editing ? "Preview" : "Edit"}</button>
     </div>
   );
+}
+
+function useLatexHtml(formula: string, displayMode: boolean): string {
+  const [html, setHtml] = useState("");
+  useEffect(() => {
+    let active = true;
+    void import("../renderers/latexRenderer").then(({ renderLatex }) => {
+      if (active) setHtml(renderLatex(formula, displayMode));
+    });
+    return () => {
+      active = false;
+    };
+  }, [displayMode, formula]);
+  return html;
 }
