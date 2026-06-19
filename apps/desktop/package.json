@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri:dev": "tauri dev",
+    "mcp": "pnpm sidecar:build && src-tauri/target/release/atria-mcp.exe",
     "sidecar:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-sidecar.ps1",
     "tauri:build": "pnpm sidecar:build && tauri build",
     "typecheck": "tsc -b --pretty false"
