@@ -1,3 +1,7 @@
+param(
+  [switch]$Quiet
+)
+
 $ErrorActionPreference = "Stop"
 
 $desktopRoot = Split-Path -Parent $PSScriptRoot
@@ -22,4 +26,6 @@ if ($LASTEXITCODE -ne 0) {
 
 $source = Join-Path $tauriRoot "target\release\atria-mcp$extension"
 Copy-Item -LiteralPath $source -Destination $destination -Force
-Write-Host "Prepared $destination"
+if (-not $Quiet) {
+  Write-Host "Prepared $destination"
+}
