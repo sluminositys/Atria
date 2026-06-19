@@ -82,10 +82,12 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "git2",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "uuid",
 ]
 
 [[package]]
