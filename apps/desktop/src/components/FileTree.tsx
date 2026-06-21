@@ -185,7 +185,7 @@ function TreeFile({
   const artifact =
     item.type === "artifact" ? snapshot.artifacts.find((entry) => entry.id === item.id) : undefined;
   const title = page?.title ?? artifact?.title ?? item.id;
-  const source = item.type === "artifact" ? "AI" : "HUMAN";
+  const source = (artifact?.source ?? page?.source) === "ai" ? "AI" : "HUMAN";
   const paddingLeft = 12 + depth * 16;
   const nodeType = item.type;
 

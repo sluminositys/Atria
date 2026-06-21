@@ -147,7 +147,7 @@ export function App() {
             <div key={tab.key} className={tab.key === activeTabKey ? styles.tabActive : styles.tab}>
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
                 <span>{tab.title}</span>
-                <small>{tab.type === "artifact" ? "HTML" : tab.type === "timeline" ? "Timeline" : "Page"}</small>
+                <small>{tab.source === "ai" ? "AI" : "Human"}</small>
               </button>
               <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
                 x
