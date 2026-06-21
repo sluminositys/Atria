@@ -1,43 +1,44 @@
 # Atria
 
-Atria is a desktop-first HTML artifact workspace for AI-assisted coding and research workflows. It helps collect, preview, organize, annotate, and reuse AI-generated HTML reports while giving humans an Obsidian-like workspace and Notion-like block editing experience. Atria exposes MCP-native tools so Codex, Claude Code, and other coding agents can register artifacts, create pages, append blocks, and build daily/weekly/monthly summaries directly inside the same workspace.
+Atria is a local-first desktop document workspace for people and AI agents. It stores editable rich documents and complete HTML artifacts as ordinary files, renders them in one workspace, and records every human or agent revision in the workspace's embedded Git repository.
 
-中文：Atria 是一个桌面优先的 HTML-first AI 工作台，用于收纳 AI 生成的 HTML 报告、人工 block 笔记和 MCP 原生 agent 接入。
+中文：Atria 是面向个人与 AI Agent 的本地优先桌面文档工作台。富文本文档与完整 HTML 报告都以普通文件保存，并在同一个工作区中编辑、预览、检索和管理；人工与 Agent 的每次修改都会进入工作区内置的 Git 历史。
 
-## Stack
+## Architecture
 
-- Tauri desktop shell
-- React + TypeScript + Vite renderer
-- CSS Modules + CSS variables
-- TipTap / ProseMirror editor
-- Zustand state
-- TanStack Query async state
-- Zod schemas
-- pnpm workspace
-- Node.js + TypeScript MCP server
-- File-system-first workspace data
+- Tauri 2 desktop shell and native Rust workspace services
+- React, TypeScript, Vite, TipTap, Zustand, and TanStack Query
+- Semantic HTML as the editable document format
+- Ordinary HTML files for complete agent-generated reports
+- Embedded `git2` repository for document history, diff, and restore
+- Bundled native MCP sidecar for Codex, Claude Code, and compatible agents
+- On-demand Mermaid and KaTeX rendering
 
 ## Workspace Shape
 
 ```text
-workspace/
-  artifacts/
-  pages/
-  timeline/
-  projects/
+Atria Workspace/
+  documents/
+  reports/
   assets/
-  templates/
   .atria/
+  .git/
 ```
+
+Any local folder can be opened as an Atria workspace. When no folder is selected, Atria creates `Atria Workspace` beside the installed executable.
 
 ## Commands
 
-```bash
+```powershell
 corepack pnpm install
 corepack pnpm dev
-corepack pnpm build
+corepack pnpm typecheck
 corepack pnpm test
-corepack pnpm mcp
+corepack pnpm desktop
+corepack pnpm --silent mcp -- --workspace "D:\path\to\workspace"
+corepack pnpm --filter @atria/desktop tauri:build
 ```
 
-Rust is required for the final Tauri desktop build. The renderer and TypeScript packages can be developed and verified independently with Node.js.
+Rust with the MSVC target is required for the desktop application and native MCP sidecar. The Tauri build produces the Windows installer under `apps/desktop/src-tauri/target/release/bundle/`.
+
+See [docs/mcp-tools.md](docs/mcp-tools.md) for the Agent interface.

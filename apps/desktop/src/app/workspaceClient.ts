@@ -178,6 +178,8 @@ export async function saveWorkspace(snapshot: WorkspaceSnapshot): Promise<void> 
               title: page.title,
               body: page.html ?? "<p></p>",
               language: "zh-cn",
+              createdBy: next.documents.find((document) => document.id === page.id)?.createdBy,
+              tags: page.tags,
             })
           : JSON.stringify(PageSchema.parse(page), null, 2);
         return invoke("atria_write_text_file", {
@@ -455,14 +457,14 @@ async function hydrateWorkspace(
       return PageSchema.parse({
         id: record?.id ?? parsed.id ?? `document-${slugify(entry.relative_path, "html")}`,
         title: previous?.title ?? record?.title ?? parsed.title,
-        source: record?.createdBy.kind === "agent" ? "ai" : (previous?.source ?? "human"),
+        source: (record?.createdBy.kind ?? parsed.createdBy?.kind) === "agent" ? "ai" : (previous?.source ?? "human"),
         kind: previous?.kind ?? "note",
         html: parsed.body,
         body: "",
         filePath: entry.relative_path,
         projectId: previous?.projectId,
         timelineRef: previous?.timelineRef,
-        tags: record?.tags ?? previous?.tags ?? [],
+        tags: record?.tags ?? parsed.tags ?? previous?.tags ?? [],
         blocks: [],
         createdAt: previous?.createdAt ?? record?.createdAt ?? timestamp,
         updatedAt: timestamp,

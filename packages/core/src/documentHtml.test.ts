@@ -28,6 +28,15 @@ describe("semantic document HTML", () => {
       id: "doc-special",
       title: 'A < B "notes"',
       body: '<p data-atria-id="p1">E = mc<sup>2</sup></p>',
+      createdBy: {
+        id: "codex",
+        label: "Codex",
+        kind: "agent",
+        tool: "codex",
+        model: "gpt-5",
+        runId: "run-1",
+      },
+      tags: ["experiment", "result"],
     });
 
     expect(parseSemanticDocument(source)).toEqual({
@@ -35,11 +44,23 @@ describe("semantic document HTML", () => {
       title: 'A < B "notes"',
       body: '<p data-atria-id="p1">E = mc<sup>2</sup></p>',
       language: "en",
+      createdBy: {
+        id: "codex",
+        label: "Codex",
+        kind: "agent",
+        tool: "codex",
+        model: "gpt-5",
+        runId: "run-1",
+      },
+      tags: ["experiment", "result"],
     });
   });
 
   it("accepts an HTML fragment during migration", () => {
-    expect(parseSemanticDocument("\uFEFF\r\n<p>Legacy</p>  ").body).toBe("<p>Legacy</p>");
+    expect(parseSemanticDocument("\uFEFF\r\n<p>Legacy</p>  ")).toMatchObject({
+      body: "<p>Legacy</p>",
+      tags: [],
+    });
     expect(normalizeHtmlText("a  \r\nb\t\r\n")).toBe("a\nb");
   });
 });

@@ -214,6 +214,8 @@ function canonicalContent(document: DocumentRecord, content: string): string {
     title: document.title,
     body: parsed?.body ?? content,
     language: parsed?.language,
+    createdBy: document.createdBy,
+    tags: document.tags,
   });
 }
 

@@ -10,7 +10,7 @@
     "build": "corepack pnpm -r --sort build",
     "typecheck": "corepack pnpm -r --sort typecheck",
     "test": "corepack pnpm -r --if-present test",
-    "mcp": "corepack pnpm --filter @atria/mcp-server dev"
+    "mcp": "powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/run-mcp.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
