@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
+  Bot,
   CheckSquare,
   Code2,
   FileCode2,
@@ -19,11 +20,13 @@ import {
   Sigma,
   Table2,
   Tags,
+  FolderOpen,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
 import { loadWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
+import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
 import styles from "./App.module.css";
 
@@ -158,7 +161,9 @@ export function App() {
 
         <section className={styles.documentSurface}>
           <Suspense fallback={<div className={styles.viewLoading} aria-busy="true" />}>
-            {activeTool === "history" && historyTarget && snapshot ? (
+            {activeTool === "settings" && snapshot ? (
+              <WorkspaceSettingsView snapshot={snapshot} onLoaded={setSnapshot} />
+            ) : activeTool === "history" && historyTarget && snapshot ? (
               <DocumentHistoryView
                 snapshot={snapshot}
                 target={historyTarget}
@@ -175,7 +180,7 @@ export function App() {
         </section>
 
         <footer className={styles.statusBar}>
-          <span>{activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
+          <span>{activeTool === "settings" ? "Settings" : activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
           <span>{activePage ? `${countCharacters(activePage)} characters` : activeArtifact?.updatedAt}</span>
           <span>{snapshot?.title}</span>
         </footer>
@@ -183,13 +188,12 @@ export function App() {
 
       <aside className={styles.blockBar}>
         <div className={styles.blockList} aria-label="Insert content">
-          {blockPalette.map((block) => {
+          {activeTab?.type === "page" && activeTool !== "history" && activeTool !== "settings" && blockPalette.map((block) => {
             const Icon = block.icon;
             return (
               <button
                 key={block.type}
                 className={styles.blockButton}
-                disabled={activeTab?.type !== "page" || activeTool === "history"}
                 title={block.label}
                 onClick={() => dispatchInsert(block.type)}
               >
@@ -231,7 +235,7 @@ export function App() {
       return <HistoryPane target={historyTarget} />;
     }
 
-    return <SettingsPane snapshot={current} onLoaded={setSnapshot} />;
+    return <SettingsPane snapshot={current} />;
   }
 }
 
@@ -379,51 +383,26 @@ function TagsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   );
 }
 
-function SettingsPane({
-  snapshot,
-  onLoaded,
-}: {
-  snapshot: WorkspaceSnapshot;
-  onLoaded(snapshot: WorkspaceSnapshot): void;
-}) {
-  const [path, setPath] = useState(snapshot.settings.workspacePath);
+function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   return (
     <>
       <div className={styles.sideTitle}>
         <strong>Settings</strong>
         <span>Local</span>
       </div>
-      <div className={styles.settingsPane}>
-        <label>
-          <span>Workspace</span>
-          <input value={path} onChange={(event) => setPath(event.target.value)} />
-        </label>
-        <button
-          className={styles.settingsButton}
-          onClick={async () => {
-            const next = await loadWorkspace(path);
-            onLoaded(next);
-          }}
-        >
-          Switch
-        </button>
-        <label>
-          <span>AI Provider</span>
-          <select defaultValue={snapshot.settings.ai.provider}>
-            <option value="ollama">Ollama</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
-        <label>
-          <span>Model</span>
-          <input defaultValue={snapshot.settings.ai.model} />
-        </label>
-        <label>
-          <span>Endpoint</span>
-          <input defaultValue={snapshot.settings.ai.endpoint} />
-        </label>
+      <div className={styles.settingsNav}>
+        <div>
+          <FolderOpen size={15} />
+          <span><strong>Workspace</strong><small>{snapshot.title}</small></span>
+        </div>
+        <div>
+          <GitBranch size={15} />
+          <span><strong>History</strong><small>Embedded Git</small></span>
+        </div>
+        <div>
+          <Bot size={15} />
+          <span><strong>Agent bridge</strong><small>Native MCP</small></span>
+        </div>
       </div>
     </>
   );

@@ -204,7 +204,9 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       return {
         snapshot,
         tabs,
-        selectedFolderId: state.selectedFolderId || snapshot.folders[0]?.id || "",
+        selectedFolderId: snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
+          ? state.selectedFolderId
+          : snapshot.folders[0]?.id || "",
         activeTabKey,
         activeBlockId,
         activeBlockPageId: activeBlockId && activePage ? activePage.id : undefined,
