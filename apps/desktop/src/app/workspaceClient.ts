@@ -63,6 +63,11 @@ export interface GitDocumentDiff {
   deletions: number;
 }
 
+export interface AgentBridgeInfo {
+  executablePath: string;
+  available: boolean;
+}
+
 const LEGACY_PAGE_EXTENSION = ".atria.json";
 const DOCUMENT_EXTENSION = ".html";
 const DEFAULT_WORKSPACE_TITLE = "My Workspace";
@@ -72,6 +77,14 @@ const checkpointTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export async function getDefaultWorkspacePath(): Promise<string> {
   return invoke<string>("atria_default_workspace_path");
+}
+
+export async function pickWorkspaceDirectory(currentPath?: string): Promise<string | null> {
+  return invoke<string | null>("atria_pick_workspace_directory", { currentPath });
+}
+
+export async function getAgentBridgeInfo(): Promise<AgentBridgeInfo> {
+  return invoke<AgentBridgeInfo>("atria_agent_bridge_info");
 }
 
 export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapshot> {

@@ -72,8 +72,10 @@ function titleFor(snapshot: WorkspaceSnapshot, type: TabType, id: string): strin
   return snapshot.pages.find((item) => item.id === id)?.title ?? id;
 }
 
-function sourceFor(type: TabType): "human" | "ai" {
-  return type === "artifact" ? "ai" : "human";
+function sourceFor(snapshot: WorkspaceSnapshot, type: TabType, id: string): "human" | "ai" {
+  if (type === "artifact") return snapshot.artifacts.find((item) => item.id === id)?.source ?? "ai";
+  if (type === "page") return snapshot.pages.find((item) => item.id === id)?.source ?? "human";
+  return "human";
 }
 
 function persist(snapshot: WorkspaceSnapshot | undefined): void {
@@ -162,7 +164,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
               ? snapshot.artifacts.some((item) => item.id === tab.id)
               : snapshot.pages.some((item) => item.id === tab.id);
           return exists
-            ? { ...tab, title: titleFor(snapshot, tab.type, tab.id), source: sourceFor(tab.type) }
+            ? { ...tab, title: titleFor(snapshot, tab.type, tab.id), source: sourceFor(snapshot, tab.type, tab.id) }
             : null;
         })
         .filter(Boolean) as WorkspaceTab[];
@@ -176,7 +178,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
               type: "page" as const,
               id: firstPage.id,
               title: firstPage.title,
-              source: "human" as const,
+              source: firstPage.source,
             }
           : firstArtifact
             ? {
@@ -202,7 +204,9 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       return {
         snapshot,
         tabs,
-        selectedFolderId: state.selectedFolderId || snapshot.folders[0]?.id || "",
+        selectedFolderId: snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
+          ? state.selectedFolderId
+          : snapshot.folders[0]?.id || "",
         activeTabKey,
         activeBlockId,
         activeBlockPageId: activeBlockId && activePage ? activePage.id : undefined,
@@ -246,7 +250,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     if (!snapshot) return;
     const key = nodeKey(type, id);
     const title = titleFor(snapshot, type, id);
-    const source = sourceFor(type);
+    const source = sourceFor(snapshot, type, id);
     const openedAt = nowIso();
 
     set((state) => {
