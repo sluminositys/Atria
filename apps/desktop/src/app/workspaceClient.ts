@@ -68,6 +68,11 @@ export interface AgentBridgeInfo {
   available: boolean;
 }
 
+export interface WorkspaceContentMatch {
+  relativePath: string;
+  snippet: string;
+}
+
 const LEGACY_PAGE_EXTENSION = ".atria.json";
 const DOCUMENT_EXTENSION = ".html";
 const DEFAULT_WORKSPACE_TITLE = "My Workspace";
@@ -85,6 +90,14 @@ export async function pickWorkspaceDirectory(currentPath?: string): Promise<stri
 
 export async function getAgentBridgeInfo(): Promise<AgentBridgeInfo> {
   return invoke<AgentBridgeInfo>("atria_agent_bridge_info");
+}
+
+export async function searchWorkspace(
+  rootPath: string,
+  query: string,
+  limit = 100,
+): Promise<WorkspaceContentMatch[]> {
+  return invoke<WorkspaceContentMatch[]>("atria_search_workspace", { rootPath, query, limit });
 }
 
 export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapshot> {
