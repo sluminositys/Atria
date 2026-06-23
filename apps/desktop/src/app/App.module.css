@@ -799,7 +799,10 @@
 }
 
 .searchPane {
+  height: calc(100vh - 58px);
+  overflow: auto;
   padding: 0 14px;
+  padding-bottom: 18px;
 }
 
 .searchPane input {
@@ -863,6 +866,13 @@
 .searchGroup small {
   color: var(--atria-faint);
   font-size: 11px;
+}
+
+.searchEmpty {
+  padding: 26px 8px;
+  color: var(--atria-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .graphPane {

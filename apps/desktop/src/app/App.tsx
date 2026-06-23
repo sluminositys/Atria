@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -23,7 +23,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
-import { loadWorkspace } from "./workspaceClient";
+import { loadWorkspace, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
@@ -261,27 +261,48 @@ function HistoryPane({ target }: { target?: HistoryTarget }) {
 
 function SearchPane() {
   const { snapshot, filter, setFilter, openNode } = useAtriaStore();
+  const [settledQuery, setSettledQuery] = useState("");
   const pages = snapshot?.pages ?? [];
   const artifacts = snapshot?.artifacts ?? [];
   const recent = snapshot?.settings.recentFiles ?? [];
   const query = filter.trim().toLowerCase();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettledQuery(query), 180);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const contentQuery = useQuery({
+    queryKey: ["workspace-search", snapshot?.settings.workspacePath, settledQuery],
+    queryFn: () => searchWorkspace(snapshot!.settings.workspacePath, settledQuery),
+    enabled: Boolean(snapshot?.settings.workspacePath && settledQuery),
+  });
   const allItems = [
     ...pages.map((item) => ({ type: "page" as const, item })),
     ...artifacts.map((item) => ({ type: "artifact" as const, item })),
   ];
-  const results = allItems.filter(({ item }) => {
-    if (!query) return true;
-    return [item.title, item.id, "filePath" in item ? item.filePath : "", ...(item.tags ?? [])]
-      .join(" ")
-      .toLowerCase()
-      .includes(query);
-  });
+  const contentMatches = new Map(
+    (contentQuery.data ?? []).map((match) => [normalizeWorkspacePath(match.relativePath), match.snippet]),
+  );
+  const results = query
+    ? allItems
+        .map(({ type, item }) => {
+          const filePath = item.filePath ?? "";
+          const metadataMatches = [item.title, item.id, filePath, ...(item.tags ?? [])]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+          const snippet = contentMatches.get(normalizeWorkspacePath(filePath));
+          return metadataMatches || snippet ? { type, item, snippet: snippet ?? filePath } : null;
+        })
+        .filter((result): result is NonNullable<typeof result> => Boolean(result))
+    : [];
 
   return (
     <>
       <div className={styles.sideTitle}>
         <strong>Search</strong>
-        <span>{query ? `${results.length} results` : `${recent.length} recent`}</span>
+        <span>{query ? (contentQuery.isFetching ? "Searching" : `${results.length} results`) : `${recent.length} recent`}</span>
       </div>
       <div className={styles.searchPane}>
         <input value={filter} placeholder="Search" onChange={(event) => setFilter(event.target.value)} />
@@ -296,18 +317,23 @@ function SearchPane() {
             ))}
           </div>
         )}
-        <div className={styles.searchResults}>
-          {results.map(({ type, item }) => (
-            <button key={`${type}:${item.id}`} onClick={() => openNode(type, item.id)}>
+        {query && <div className={styles.searchResults}>
+          {results.map(({ type, item, snippet }) => (
+            <button key={`${type}:${item.id}`} title={item.filePath} onClick={() => openNode(type, item.id)}>
               {type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
               <strong>{item.title}</strong>
-              <small>{"filePath" in item ? item.filePath : type}</small>
+              <small>{snippet}</small>
             </button>
           ))}
-        </div>
+          {!contentQuery.isFetching && results.length === 0 && <div className={styles.searchEmpty}>No matches</div>}
+        </div>}
       </div>
     </>
   );
+}
+
+function normalizeWorkspacePath(path: string): string {
+  return path.replace(/\\/g, "/").toLowerCase();
 }
 
 function GraphPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
