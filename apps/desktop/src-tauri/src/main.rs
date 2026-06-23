@@ -26,6 +26,13 @@ struct WorkspaceReadResult {
   entries: Vec<WorkspaceEntry>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentBridgeInfo {
+  executable_path: String,
+  available: bool,
+}
+
 fn default_workspace_path() -> Result<PathBuf, String> {
   let exe = std::env::current_exe().map_err(|error| error.to_string())?;
   let base = exe
@@ -99,6 +106,43 @@ fn collect_entries(root: &Path, current: &Path, entries: &mut Vec<WorkspaceEntry
 #[tauri::command]
 fn atria_default_workspace_path() -> Result<String, String> {
   Ok(default_workspace_path()?.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn atria_pick_workspace_directory(current_path: Option<String>) -> Option<String> {
+  let mut dialog = rfd::FileDialog::new().set_title("Open Atria workspace");
+  if let Some(path) = current_path.filter(|path| !path.trim().is_empty()) {
+    dialog = dialog.set_directory(path);
+  }
+  dialog
+    .pick_folder()
+    .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn atria_agent_bridge_info() -> Result<AgentBridgeInfo, String> {
+  let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+  let sibling = executable
+    .parent()
+    .map(|directory| directory.join("atria-mcp.exe"))
+    .ok_or_else(|| "Cannot resolve executable directory".to_string())?;
+
+  #[cfg(debug_assertions)]
+  let candidate = if sibling.exists() {
+    sibling
+  } else {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("target")
+      .join("release")
+      .join("atria-mcp.exe")
+  };
+  #[cfg(not(debug_assertions))]
+  let candidate = sibling;
+
+  Ok(AgentBridgeInfo {
+    available: candidate.is_file(),
+    executable_path: candidate.to_string_lossy().into_owned(),
+  })
 }
 
 #[tauri::command]
@@ -215,6 +259,8 @@ fn main() {
     })
     .invoke_handler(tauri::generate_handler![
       atria_default_workspace_path,
+      atria_pick_workspace_directory,
+      atria_agent_bridge_info,
       atria_read_workspace,
       atria_read_text_prefix,
       atria_write_workspace_snapshot,
