@@ -7,14 +7,13 @@ import {
 } from "./index";
 
 describe("WorkspaceService", () => {
-  it("creates the default HTML-first workspace shape", async () => {
+  it("creates a clean local-first workspace without demo content", async () => {
     const service = new WorkspaceService(new MemoryWorkspaceRepository(createDefaultWorkspace()));
     const snapshot = await service.getSnapshot();
 
-    expect(snapshot.folders.map((folder) => folder.id)).toContain("html-results");
-    expect(snapshot.folders.map((folder) => folder.id)).toContain("timeline");
-    expect(snapshot.artifacts[0]?.source).toBe("ai");
-    expect(snapshot.pages[0]?.source).toBe("human");
+    expect(snapshot.folders.map((folder) => folder.id)).toEqual(["notes", "reports", "assets", "templates"]);
+    expect(snapshot.artifacts).toEqual([]);
+    expect(snapshot.pages).toEqual([]);
   });
 
   it("creates a page and appends a block", async () => {
@@ -36,7 +35,7 @@ describe("WorkspaceService", () => {
 
     expect(artifact.source).toBe("ai");
     expect(artifact.kind).toBe("html");
+    expect((await service.getSnapshot()).tree.at(-1)?.parentId).toBe("reports");
     expect((await service.search("new-result", 10))[0]?.item.id).toBe(artifact.id);
   });
 });
-
