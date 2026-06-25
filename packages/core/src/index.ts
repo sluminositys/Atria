@@ -15,6 +15,9 @@ import {
   WorkspaceTreeItem,
 } from "@atria/schema";
 
+export { buildDocumentGraph } from "./documentGraph";
+export type { DocumentGraph, DocumentGraphEdge, DocumentGraphNode } from "./documentGraph";
+
 export interface WorkspaceRepository {
   read(): Promise<WorkspaceSnapshot>;
   write(snapshot: WorkspaceSnapshot): Promise<void>;
