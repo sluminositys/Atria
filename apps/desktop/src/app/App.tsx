@@ -26,6 +26,7 @@ import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
 import { loadWorkspace, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { FileTree } from "../components/FileTree";
+import { DocumentGraphPane } from "../components/DocumentGraphPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
 import styles from "./App.module.css";
@@ -224,7 +225,7 @@ export function App() {
     }
 
     if (activeTool === "graph") {
-      return <GraphPane snapshot={current} />;
+      return <DocumentGraphPane snapshot={current} />;
     }
 
     if (activeTool === "tags") {
@@ -334,46 +335,6 @@ function SearchPane() {
 
 function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").toLowerCase();
-}
-
-function GraphPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
-  const folders = snapshot.folders
-    .map((folder) => {
-      const prefix = folder.path ? `${folder.path}/` : "";
-      const pages = snapshot.pages.filter((page) => page.filePath?.startsWith(prefix));
-      const artifacts = snapshot.artifacts.filter((artifact) => artifact.filePath?.startsWith(prefix));
-      return { folder, pages, artifacts };
-    })
-    .filter((item) => item.pages.length || item.artifacts.length)
-    .slice(0, 30);
-
-  return (
-    <>
-      <div className={styles.sideTitle}>
-        <strong>Graph</strong>
-        <span>{folders.length} linked folders</span>
-      </div>
-      <div className={styles.graphList}>
-        {folders.map(({ folder, pages, artifacts }) => (
-          <section key={folder.id}>
-            <strong>{folder.path}</strong>
-            {pages.map((page) => (
-              <button key={page.id} onClick={() => useAtriaStore.getState().openNode("page", page.id)}>
-                <FileText size={13} />
-                <span>{page.title}</span>
-              </button>
-            ))}
-            {artifacts.map((artifact) => (
-              <button key={artifact.id} onClick={() => useAtriaStore.getState().openNode("artifact", artifact.id)}>
-                <FileCode2 size={13} />
-                <span>{artifact.title}</span>
-              </button>
-            ))}
-          </section>
-        ))}
-      </div>
-    </>
-  );
 }
 
 function TagsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {

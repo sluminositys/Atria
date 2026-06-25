@@ -875,53 +875,111 @@
   text-align: center;
 }
 
-.graphPane {
-  margin: 0 14px;
+.documentGraphPane {
+  height: calc(100vh - 58px);
+  min-height: 0;
   display: grid;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--atria-soft-line);
-  border-radius: var(--atria-radius);
-  background: #fbfbfa;
-  color: var(--atria-muted);
-}
-
-.graphPane span {
-  color: var(--atria-ink);
-  font-weight: 650;
-}
-
-.graphList {
-  display: grid;
-  gap: 10px;
-  padding: 0 12px 18px;
-  overflow: auto;
-}
-
-.graphList section {
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-  border: 1px solid var(--atria-soft-line);
-  border-radius: var(--atria-radius);
-  background: #fbfbfa;
-}
-
-.graphList section > strong {
-  min-width: 0;
+  grid-template-rows: 26px 218px minmax(0, 1fr);
   overflow: hidden;
-  color: var(--atria-muted);
-  font-size: 12px;
-  font-weight: 620;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 10px 14px;
 }
 
-.graphList button {
-  min-height: 28px;
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+.graphLegend {
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-right: 4px;
+  color: var(--atria-muted);
+  font-size: 10px;
+}
+
+.graphLegend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.graphHumanSwatch,
+.graphAgentSwatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f343b;
+}
+
+.graphAgentSwatch {
+  background: #477f7d;
+}
+
+.documentGraphCanvas {
+  width: 100%;
+  height: 218px;
+  display: block;
+  border-bottom: 1px solid var(--atria-soft-line);
+  background: #fbfbfa;
+}
+
+.graphLinkEdge,
+.graphEmbedEdge {
+  stroke: #c5c7ca;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.graphEmbedEdge {
+  stroke: #77a6a3;
+  stroke-dasharray: 3 3;
+}
+
+.graphNode {
+  cursor: pointer;
+  outline: none;
+}
+
+.graphHumanNode,
+.graphAgentNode {
+  fill: #2f343b;
+  stroke: white;
+  stroke-width: 2;
+  transition: r 120ms ease;
+}
+
+.graphAgentNode {
+  fill: #477f7d;
+}
+
+.graphNode:hover .graphHumanNode,
+.graphNode:hover .graphAgentNode,
+.graphNode:focus .graphHumanNode,
+.graphNode:focus .graphAgentNode {
+  r: 9px;
+}
+
+.graphActiveRing {
+  fill: none;
+  stroke: var(--atria-blue);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.graphRelations {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding-top: 8px;
+}
+
+.graphRelations button {
+  min-width: 0;
+  height: 34px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 14px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--atria-radius);
   background: transparent;
@@ -929,15 +987,33 @@
   text-align: left;
 }
 
-.graphList button:hover {
+.graphRelations button:hover {
   background: var(--atria-active);
 }
 
-.graphList button span {
+.graphRelations button span,
+.graphRelations button small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.graphRelations button span {
+  font-size: 11px;
+}
+
+.graphRelations button small {
+  color: var(--atria-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.graphEmpty {
+  padding: 24px 8px;
+  color: var(--atria-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .tagList {
