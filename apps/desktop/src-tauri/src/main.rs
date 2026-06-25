@@ -2,11 +2,13 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
 use tauri::tray::TrayIconBuilder;
 
 mod git_history;
@@ -32,6 +34,17 @@ struct AgentBridgeInfo {
   executable_path: String,
   available: bool,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceSearchMatch {
+  relative_path: String,
+  snippet: String,
+}
+
+const MAX_SEARCH_FILE_BYTES: u64 = 2 * 1024 * 1024;
+static HTML_TAG_PATTERN: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"(?s)<[^>]*>").expect("valid HTML tag pattern"));
 
 fn default_workspace_path() -> Result<PathBuf, String> {
   let exe = std::env::current_exe().map_err(|error| error.to_string())?;
@@ -83,7 +96,7 @@ fn collect_entries(root: &Path, current: &Path, entries: &mut Vec<WorkspaceEntry
     let item = item.map_err(|error| error.to_string())?;
     let path = item.path();
     let name = item.file_name().to_string_lossy().to_string();
-    if current == root && name == ".atria" {
+    if current == root && (name == ".atria" || name == ".git") {
       continue;
     }
 
@@ -165,6 +178,79 @@ fn atria_read_workspace(root_path: Option<String>) -> Result<WorkspaceReadResult
     snapshot,
     entries,
   })
+}
+
+#[tauri::command]
+fn atria_search_workspace(
+  root_path: Option<String>,
+  query: String,
+  limit: Option<usize>,
+) -> Result<Vec<WorkspaceSearchMatch>, String> {
+  let needle = query.trim().to_lowercase();
+  if needle.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let root = resolve_root(root_path)?;
+  let mut entries = Vec::new();
+  collect_entries(&root, &root, &mut entries)?;
+  let limit = limit.unwrap_or(100).clamp(1, 100);
+  let mut matches = Vec::new();
+  for entry in entries {
+    if entry.kind != "file" || !is_searchable_document(&entry.relative_path) {
+      continue;
+    }
+
+    let path_matches = entry.relative_path.to_lowercase().contains(&needle);
+    let file = fs::File::open(&entry.absolute_path).map_err(|error| error.to_string())?;
+    let mut bytes = Vec::new();
+    file
+      .take(MAX_SEARCH_FILE_BYTES)
+      .read_to_end(&mut bytes)
+      .map_err(|error| error.to_string())?;
+    let content = String::from_utf8_lossy(&bytes);
+    let snippet = search_snippet(&content, &needle);
+    if path_matches || snippet.is_some() {
+      matches.push(WorkspaceSearchMatch {
+        relative_path: entry.relative_path,
+        snippet: snippet.unwrap_or_else(|| "Path match".to_string()),
+      });
+      if matches.len() >= limit {
+        break;
+      }
+    }
+  }
+
+  Ok(matches)
+}
+
+fn is_searchable_document(path: &str) -> bool {
+  matches!(
+    Path::new(path)
+      .extension()
+      .and_then(|extension| extension.to_str())
+      .map(str::to_lowercase)
+      .as_deref(),
+    Some("html" | "htm" | "md" | "txt" | "json" | "csv" | "tex")
+  )
+}
+
+fn search_snippet(content: &str, needle: &str) -> Option<String> {
+  let lower = content.to_lowercase();
+  let byte_index = lower.find(needle)?;
+  let character_index = lower[..byte_index].chars().count();
+  let characters = content.chars().collect::<Vec<_>>();
+  let start = character_index.saturating_sub(70);
+  let end = (character_index + needle.chars().count() + 110).min(characters.len());
+  let raw = characters[start..end].iter().collect::<String>();
+  let without_tags = HTML_TAG_PATTERN.replace_all(&raw, " ");
+  let clean = without_tags.split_whitespace().collect::<Vec<_>>().join(" ");
+  Some(format!(
+    "{}{}{}",
+    if start > 0 { "..." } else { "" },
+    clean,
+    if end < characters.len() { "..." } else { "" }
+  ))
 }
 
 #[tauri::command]
@@ -262,6 +348,7 @@ fn main() {
       atria_pick_workspace_directory,
       atria_agent_bridge_info,
       atria_read_workspace,
+      atria_search_workspace,
       atria_read_text_prefix,
       atria_write_workspace_snapshot,
       atria_read_text_file,
@@ -279,4 +366,22 @@ fn main() {
     ])
     .run(tauri::generate_context!())
     .expect("error while running Atria");
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{is_searchable_document, search_snippet};
+
+  #[test]
+  fn limits_search_to_document_formats() {
+    assert!(is_searchable_document("reports/result.HTML"));
+    assert!(is_searchable_document("notes/summary.md"));
+    assert!(!is_searchable_document("assets/chart.png"));
+  }
+
+  #[test]
+  fn creates_plain_text_snippets_without_breaking_unicode() {
+    let snippet = search_snippet("<h1>实验结果</h1><p>Recall improved</p>", "recall").unwrap();
+    assert_eq!(snippet, "实验结果 Recall improved");
+  }
 }
