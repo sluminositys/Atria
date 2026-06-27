@@ -9,6 +9,7 @@ interface FileTreeProps {
 }
 
 type TreeMenu =
+  | { x: number; y: number; kind: "root" }
   | { x: number; y: number; kind: "folder"; folderId: string }
   | { x: number; y: number; kind: "page"; pageId: string };
 
@@ -26,7 +27,16 @@ export function FileTree({ snapshot }: FileTreeProps) {
   const [menu, setMenu] = useState<TreeMenu | null>(null);
 
   return (
-    <div className={styles.fileTree} onClick={() => setMenu(null)} onContextMenu={(event) => event.preventDefault()}>
+    <div
+      className={styles.fileTree}
+      onClick={() => setMenu(null)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (event.target === event.currentTarget) {
+          setMenu({ x: event.clientX, y: event.clientY, kind: "root" });
+        }
+      }}
+    >
       {foldersFor(snapshot, null).map((folder) => (
         <FolderNode
           key={folder.id}
@@ -42,7 +52,29 @@ export function FileTree({ snapshot }: FileTreeProps) {
       ))}
       {menu && (
         <div className={styles.contextMenu} style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
-          {menu.kind === "folder" ? (
+          {menu.kind === "root" ? (
+            <>
+              {(selectedFolderId || snapshot.folders[0]?.id) && (
+                <button
+                  onClick={async () => {
+                    setMenu(null);
+                    await createPage(selectedFolderId || snapshot.folders[0]!.id);
+                  }}
+                >
+                  New note
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  const name = window.prompt("Folder name", "New Folder");
+                  setMenu(null);
+                  if (name) await createFolder(null, name);
+                }}
+              >
+                New folder
+              </button>
+            </>
+          ) : menu.kind === "folder" ? (
             <>
               <button
                 onClick={async () => {
