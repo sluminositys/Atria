@@ -9,9 +9,11 @@ import {
 import { createBlock, createEmptyDocument, nowIso, slugify } from "@atria/core";
 import {
   createDirectory,
+  checkpointWorkspacePaths,
   createPageFilePath,
   deleteWorkspacePath,
   importImageDataUrl,
+  moveWorkspacePath,
   queueWorkspaceSave,
   scheduleDocumentCheckpoint,
 } from "./workspaceClient";
@@ -51,8 +53,12 @@ interface AtriaState {
   openNode(type: TabType, id: string): void;
   closeTab(key: string): void;
   createFolder(parentFolderId?: string | null, name?: string): Promise<void>;
+  renameFolder(folderId: string, name: string): Promise<void>;
+  moveFolder(folderId: string, parentFolderId: string | null): Promise<void>;
   deleteFolder(folderId: string): Promise<void>;
   createPage(folderId?: string, title?: string): Promise<void>;
+  renameNode(type: "page" | "artifact", id: string, name: string): Promise<void>;
+  moveNode(type: "page" | "artifact", id: string, folderId: string): Promise<void>;
   updatePage(pageId: string, patch: Partial<Page>): void;
   deletePage(pageId: string): Promise<void>;
   addBlock(type: AtriaBlockType, options?: AddBlockOptions): void;
@@ -144,6 +150,84 @@ function uniquePageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title
 function folderContains(folder: WorkspaceFolder, path: string | undefined): boolean {
   if (!folder.path || !path) return false;
   return path === folder.path || path.startsWith(`${folder.path}/`);
+}
+
+function joinWorkspacePath(...parts: Array<string | undefined>): string {
+  return parts
+    .filter(Boolean)
+    .join("/")
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/^\/|\/$/g, "");
+}
+
+function workspaceParentPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index < 0 ? "" : normalized.slice(0, index);
+}
+
+function workspaceFileName(path: string): string {
+  return path.replace(/\\/g, "/").split("/").pop() ?? path;
+}
+
+function cleanWorkspaceName(name: string, fallback = "Untitled"): string {
+  return name.replace(/[<>:"\\|?*]+/g, "-").trim().replace(/[. ]+$/g, "") || fallback;
+}
+
+function replaceWorkspacePath(path: string | undefined, fromPath: string, toPath: string): string | undefined {
+  if (!path) return path;
+  if (path === fromPath) return toPath;
+  return path.startsWith(`${fromPath}/`) ? `${toPath}${path.slice(fromPath.length)}` : path;
+}
+
+function remapFolderSnapshot(
+  snapshot: WorkspaceSnapshot,
+  folderId: string,
+  parentFolderId: string | null,
+  fromPath: string,
+  toPath: string,
+): WorkspaceSnapshot {
+  const name = workspaceFileName(toPath);
+  return {
+    ...snapshot,
+    folders: snapshot.folders.map((folder) => ({
+      ...folder,
+      name: folder.id === folderId ? name : folder.name,
+      parentId: folder.id === folderId ? parentFolderId : folder.parentId,
+      path: replaceWorkspacePath(folder.path, fromPath, toPath),
+    })),
+    pages: snapshot.pages.map((page) => ({
+      ...page,
+      filePath: replaceWorkspacePath(page.filePath, fromPath, toPath),
+    })),
+    artifacts: snapshot.artifacts.map((artifact) => ({
+      ...artifact,
+      filePath: replaceWorkspacePath(artifact.filePath, fromPath, toPath),
+    })),
+    documents: snapshot.documents.map((document) => ({
+      ...document,
+      path: replaceWorkspacePath(document.path, fromPath, toPath) ?? document.path,
+    })),
+    tree: snapshot.tree.map((item) => ({
+      ...item,
+      filePath: replaceWorkspacePath(item.filePath, fromPath, toPath),
+    })),
+    updatedAt: nowIso(),
+  };
+}
+
+function movedDocumentPaths(
+  before: WorkspaceSnapshot,
+  after: WorkspaceSnapshot,
+  folderPath: string,
+): string[] {
+  const nextById = new Map(after.documents.map((document) => [document.id, document.path]));
+  return before.documents.flatMap((document) =>
+    document.path === folderPath || document.path.startsWith(`${folderPath}/`)
+      ? [document.path, nextById.get(document.id)].filter((path): path is string => Boolean(path))
+      : [],
+  );
 }
 
 export const useAtriaStore = create<AtriaState>((set, get) => ({
@@ -327,6 +411,47 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     persist(next);
   },
 
+  async renameFolder(folderId, name) {
+    const snapshot = get().snapshot;
+    const folder = snapshot?.folders.find((item) => item.id === folderId);
+    if (!snapshot || !folder?.path) return;
+    const cleanName = cleanWorkspaceName(name, folder.name);
+    const destination = joinWorkspacePath(workspaceParentPath(folder.path), cleanName);
+    if (destination === folder.path) return;
+    await queueWorkspaceSave(snapshot);
+    await moveWorkspacePath(snapshot, folder.path, destination);
+    const next = remapFolderSnapshot(snapshot, folderId, folder.parentId, folder.path, destination);
+    set({ snapshot: next, selectedFolderId: folderId });
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(
+      next.settings.workspacePath,
+      movedDocumentPaths(snapshot, next, folder.path),
+      `Rename folder ${folder.name} to ${cleanName}`,
+      { actorName: "Local user", transactionId: crypto.randomUUID() },
+    );
+  },
+
+  async moveFolder(folderId, parentFolderId) {
+    const snapshot = get().snapshot;
+    const folder = snapshot?.folders.find((item) => item.id === folderId);
+    const parent = parentFolderId ? snapshot?.folders.find((item) => item.id === parentFolderId) : undefined;
+    if (!snapshot || !folder?.path || parentFolderId === folderId) return;
+    if (parent?.path && (parent.path === folder.path || parent.path.startsWith(`${folder.path}/`))) return;
+    const destination = joinWorkspacePath(parent?.path, folder.name);
+    if (destination === folder.path) return;
+    await queueWorkspaceSave(snapshot);
+    await moveWorkspacePath(snapshot, folder.path, destination);
+    const next = remapFolderSnapshot(snapshot, folderId, parent?.id ?? null, folder.path, destination);
+    set({ snapshot: next, selectedFolderId: folderId });
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(
+      next.settings.workspacePath,
+      movedDocumentPaths(snapshot, next, folder.path),
+      `Move folder ${folder.name}`,
+      { actorName: "Local user", transactionId: crypto.randomUUID() },
+    );
+  },
+
   async deleteFolder(folderId) {
     const snapshot = get().snapshot;
     const folder = snapshot?.folders.find((item) => item.id === folderId);
@@ -403,6 +528,94 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     set({ snapshot: next, selectedFolderId: folderId, activeBlockPageId: undefined, activeBlockId: undefined });
     persist(next);
     get().openNode("page", page.id);
+  },
+
+  async renameNode(type, id, name) {
+    const snapshot = get().snapshot;
+    const item = type === "page"
+      ? snapshot?.pages.find((page) => page.id === id)
+      : snapshot?.artifacts.find((artifact) => artifact.id === id);
+    if (!snapshot || !item?.filePath) return;
+    const currentName = workspaceFileName(item.filePath);
+    const extension = currentName.includes(".") ? currentName.slice(currentName.lastIndexOf(".")) : ".html";
+    const requestedName = cleanWorkspaceName(name, currentName);
+    const nextFileName = requestedName.toLowerCase().endsWith(extension.toLowerCase())
+      ? requestedName
+      : `${requestedName}${extension}`;
+    const destination = joinWorkspacePath(workspaceParentPath(item.filePath), nextFileName);
+    await queueWorkspaceSave(snapshot);
+    if (destination !== item.filePath) await moveWorkspacePath(snapshot, item.filePath, destination);
+    const nextTitle = type === "page" ? nextFileName.slice(0, -extension.length) : nextFileName;
+    const next: WorkspaceSnapshot = {
+      ...snapshot,
+      pages: snapshot.pages.map((page) =>
+        type === "page" && page.id === id ? { ...page, title: nextTitle, filePath: destination, updatedAt: nowIso() } : page,
+      ),
+      artifacts: snapshot.artifacts.map((artifact) =>
+        type === "artifact" && artifact.id === id
+          ? { ...artifact, title: nextTitle, filePath: destination, updatedAt: nowIso() }
+          : artifact,
+      ),
+      documents: snapshot.documents.map((document) =>
+        document.id === id ? { ...document, title: nextTitle, path: destination, updatedAt: nowIso() } : document,
+      ),
+      tree: snapshot.tree.map((treeItem) =>
+        treeItem.type === type && treeItem.id === id ? { ...treeItem, filePath: destination } : treeItem,
+      ),
+      updatedAt: nowIso(),
+    };
+    set((state) => ({
+      snapshot: next,
+      tabs: state.tabs.map((tab) => (tab.type === type && tab.id === id ? { ...tab, title: nextTitle } : tab)),
+    }));
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(
+      next.settings.workspacePath,
+      [item.filePath, destination],
+      `Rename ${currentName} to ${nextFileName}`,
+      { actorName: "Local user", transactionId: crypto.randomUUID() },
+    );
+  },
+
+  async moveNode(type, id, folderId) {
+    const snapshot = get().snapshot;
+    const folder = snapshot?.folders.find((item) => item.id === folderId);
+    const item = type === "page"
+      ? snapshot?.pages.find((page) => page.id === id)
+      : snapshot?.artifacts.find((artifact) => artifact.id === id);
+    if (!snapshot || !folder?.path || !item?.filePath) return;
+    const destination = joinWorkspacePath(folder.path, workspaceFileName(item.filePath));
+    if (destination === item.filePath) return;
+    await queueWorkspaceSave(snapshot);
+    await moveWorkspacePath(snapshot, item.filePath, destination);
+    const next: WorkspaceSnapshot = {
+      ...snapshot,
+      pages: snapshot.pages.map((page) =>
+        type === "page" && page.id === id ? { ...page, filePath: destination, updatedAt: nowIso() } : page,
+      ),
+      artifacts: snapshot.artifacts.map((artifact) =>
+        type === "artifact" && artifact.id === id
+          ? { ...artifact, filePath: destination, updatedAt: nowIso() }
+          : artifact,
+      ),
+      documents: snapshot.documents.map((document) =>
+        document.id === id ? { ...document, path: destination, updatedAt: nowIso() } : document,
+      ),
+      tree: snapshot.tree.map((treeItem) =>
+        treeItem.type === type && treeItem.id === id
+          ? { ...treeItem, parentId: folderId, filePath: destination }
+          : treeItem,
+      ),
+      updatedAt: nowIso(),
+    };
+    set({ snapshot: next, selectedFolderId: folderId });
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(
+      next.settings.workspacePath,
+      [item.filePath, destination],
+      `Move ${workspaceFileName(item.filePath)}`,
+      { actorName: "Local user", transactionId: crypto.randomUUID() },
+    );
   },
 
   updatePage(pageId, patch) {
