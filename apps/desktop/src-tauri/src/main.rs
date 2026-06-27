@@ -303,6 +303,27 @@ fn atria_create_directory(root_path: Option<String>, relative_path: String) -> R
 }
 
 #[tauri::command]
+fn atria_move_path(
+  root_path: Option<String>,
+  from_relative_path: String,
+  to_relative_path: String,
+) -> Result<(), String> {
+  let root = resolve_root(root_path)?;
+  let source = safe_join(&root, &from_relative_path)?;
+  let destination = safe_join(&root, &to_relative_path)?;
+  if !source.exists() {
+    return Err(format!("Source path does not exist: {from_relative_path}"));
+  }
+  if destination.exists() {
+    return Err(format!("Destination already exists: {to_relative_path}"));
+  }
+  if let Some(parent) = destination.parent() {
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+  }
+  fs::rename(source, destination).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn atria_delete_path(root_path: Option<String>, relative_path: String) -> Result<(), String> {
   let root = resolve_root(root_path)?;
   let path = safe_join(&root, &relative_path)?;
@@ -354,6 +375,7 @@ fn main() {
       atria_read_text_file,
       atria_write_text_file,
       atria_create_directory,
+      atria_move_path,
       atria_delete_path,
       atria_write_data_url,
       git_history::atria_git_initialize,
@@ -370,7 +392,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-  use super::{is_searchable_document, search_snippet};
+  use super::{atria_move_path, is_searchable_document, search_snippet};
+  use std::fs;
 
   #[test]
   fn limits_search_to_document_formats() {
@@ -383,5 +406,23 @@ mod tests {
   fn creates_plain_text_snippets_without_breaking_unicode() {
     let snippet = search_snippet("<h1>实验结果</h1><p>Recall improved</p>", "recall").unwrap();
     assert_eq!(snippet, "实验结果 Recall improved");
+  }
+
+  #[test]
+  fn moves_real_workspace_paths_and_creates_the_destination_parent() {
+    let root = std::env::temp_dir().join(format!("atria-move-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("note.html"), "content").unwrap();
+
+    atria_move_path(
+      Some(root.to_string_lossy().into_owned()),
+      "note.html".to_string(),
+      "Notes/renamed.html".to_string(),
+    )
+    .unwrap();
+
+    assert!(!root.join("note.html").exists());
+    assert_eq!(fs::read_to_string(root.join("Notes/renamed.html")).unwrap(), "content");
+    fs::remove_dir_all(root).unwrap();
   }
 }
