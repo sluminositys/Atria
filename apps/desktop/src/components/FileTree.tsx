@@ -11,7 +11,14 @@ interface FileTreeProps {
 type TreeMenu =
   | { x: number; y: number; kind: "root" }
   | { x: number; y: number; kind: "folder"; folderId: string }
-  | { x: number; y: number; kind: "page"; pageId: string };
+  | { x: number; y: number; kind: "file"; nodeType: "page" | "artifact"; nodeId: string };
+
+interface TreeDragData {
+  kind: "folder" | "page" | "artifact";
+  id: string;
+}
+
+const TREE_DRAG_TYPE = "application/x-atria-workspace-node";
 
 export function FileTree({ snapshot }: FileTreeProps) {
   const {
@@ -21,10 +28,15 @@ export function FileTree({ snapshot }: FileTreeProps) {
     openNode,
     createPage,
     createFolder,
+    renameFolder,
+    moveFolder,
     deleteFolder,
+    renameNode,
+    moveNode,
     deletePage,
   } = useAtriaStore();
   const [menu, setMenu] = useState<TreeMenu | null>(null);
+  const [dragTargetId, setDragTargetId] = useState<string | null>(null);
 
   return (
     <div
@@ -36,6 +48,16 @@ export function FileTree({ snapshot }: FileTreeProps) {
           setMenu({ x: event.clientX, y: event.clientY, kind: "root" });
         }
       }}
+      onDragOver={(event) => {
+        if (event.target === event.currentTarget) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const dragged = readDragData(event);
+        setDragTargetId(null);
+        if (dragged?.kind === "folder") void moveFolder(dragged.id, null);
+      }}
+      onDragEnd={() => setDragTargetId(null)}
     >
       {foldersFor(snapshot, null).map((folder) => (
         <FolderNode
@@ -48,6 +70,13 @@ export function FileTree({ snapshot }: FileTreeProps) {
           onToggleFolder={toggleFolder}
           onOpenNode={openNode}
           onMenu={(nextMenu) => setMenu(nextMenu)}
+          dragTargetId={dragTargetId}
+          onDragTarget={setDragTargetId}
+          onDropItem={(targetFolderId, dragged) => {
+            setDragTargetId(null);
+            if (dragged.kind === "folder") void moveFolder(dragged.id, targetFolderId);
+            else void moveNode(dragged.kind, dragged.id, targetFolderId);
+          }}
         />
       ))}
       {menu && (
@@ -78,6 +107,26 @@ export function FileTree({ snapshot }: FileTreeProps) {
             <>
               <button
                 onClick={async () => {
+                  const folder = snapshot.folders.find((item) => item.id === menu.folderId);
+                  const name = window.prompt("Folder name", folder?.name ?? "");
+                  setMenu(null);
+                  if (name) await renameFolder(menu.folderId, name);
+                }}
+              >
+                Rename
+              </button>
+              {snapshot.folders.find((item) => item.id === menu.folderId)?.parentId && (
+                <button
+                  onClick={async () => {
+                    setMenu(null);
+                    await moveFolder(menu.folderId, null);
+                  }}
+                >
+                  Move to root
+                </button>
+              )}
+              <button
+                onClick={async () => {
                   setMenu(null);
                   await createPage(menu.folderId);
                 }}
@@ -104,14 +153,30 @@ export function FileTree({ snapshot }: FileTreeProps) {
               </button>
             </>
           ) : (
-            <button
-              onClick={async () => {
-                setMenu(null);
-                await deletePage(menu.pageId);
-              }}
-            >
-              Delete note
-            </button>
+            <>
+              <button
+                onClick={async () => {
+                  const item = menu.nodeType === "page"
+                    ? snapshot.pages.find((page) => page.id === menu.nodeId)
+                    : snapshot.artifacts.find((artifact) => artifact.id === menu.nodeId);
+                  const name = window.prompt("File name", item?.title ?? "");
+                  setMenu(null);
+                  if (name) await renameNode(menu.nodeType, menu.nodeId, name);
+                }}
+              >
+                Rename
+              </button>
+              {menu.nodeType === "page" && (
+                <button
+                  onClick={async () => {
+                    setMenu(null);
+                    await deletePage(menu.nodeId);
+                  }}
+                >
+                  Delete note
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -128,6 +193,9 @@ function FolderNode({
   onToggleFolder,
   onOpenNode,
   onMenu,
+  dragTargetId,
+  onDragTarget,
+  onDropItem,
 }: {
   folder: WorkspaceFolder;
   depth: number;
@@ -137,6 +205,9 @@ function FolderNode({
   onToggleFolder(folderId: string): void;
   onOpenNode(type: "page" | "artifact", id: string): void;
   onMenu(menu: TreeMenu): void;
+  dragTargetId: string | null;
+  onDragTarget(folderId: string | null): void;
+  onDropItem(folderId: string, dragged: TreeDragData): void;
 }) {
   const children = foldersFor(snapshot, folder.id);
   const items = treeItemsFor(snapshot, folder.id);
@@ -146,14 +217,31 @@ function FolderNode({
   return (
     <section>
       <button
-        className={isSelected ? styles.folderRowActive : styles.folderRow}
+        className={dragTargetId === folder.id ? styles.folderRowDrop : isSelected ? styles.folderRowActive : styles.folderRow}
         style={{ paddingLeft }}
+        draggable
         onClick={() => onSelectFolder(folder.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
           onSelectFolder(folder.id);
           onMenu({ x: event.clientX, y: event.clientY, kind: "folder", folderId: folder.id });
+        }}
+        onDragStart={(event) => writeDragData(event, { kind: "folder", id: folder.id })}
+        onDragEnd={() => onDragTarget(null)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDragTarget(folder.id);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onDragTarget(null);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const dragged = readDragData(event);
+          if (dragged) onDropItem(folder.id, dragged);
         }}
       >
         <span
@@ -181,6 +269,9 @@ function FolderNode({
               onToggleFolder={onToggleFolder}
               onOpenNode={onOpenNode}
               onMenu={onMenu}
+              dragTargetId={dragTargetId}
+              onDragTarget={onDragTarget}
+              onDropItem={onDropItem}
             />
           ))}
           {items.map((item) => (
@@ -225,13 +316,13 @@ function TreeFile({
     <button
       className={styles.treeFile}
       style={{ paddingLeft }}
+      draggable
       onClick={() => onOpenNode(nodeType, item.id)}
+      onDragStart={(event) => writeDragData(event, { kind: nodeType, id: item.id })}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (item.type === "page") {
-          onMenu({ x: event.clientX, y: event.clientY, kind: "page", pageId: item.id });
-        }
+        onMenu({ x: event.clientX, y: event.clientY, kind: "file", nodeType, nodeId: item.id });
       }}
     >
       {item.type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
@@ -241,6 +332,23 @@ function TreeFile({
       </span>
     </button>
   );
+}
+
+function writeDragData(event: React.DragEvent, data: TreeDragData): void {
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(TREE_DRAG_TYPE, JSON.stringify(data));
+}
+
+function readDragData(event: React.DragEvent): TreeDragData | undefined {
+  try {
+    const value = JSON.parse(event.dataTransfer.getData(TREE_DRAG_TYPE)) as Partial<TreeDragData>;
+    if ((value.kind === "folder" || value.kind === "page" || value.kind === "artifact") && typeof value.id === "string") {
+      return { kind: value.kind, id: value.id };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function foldersFor(snapshot: WorkspaceSnapshot, parentId: string | null): WorkspaceFolder[] {

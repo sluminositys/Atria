@@ -74,6 +74,7 @@
 
 .folderRow,
 .folderRowActive,
+.folderRowDrop,
 .treeFile {
   width: calc(100% - 18px);
   min-height: 32px;
@@ -86,7 +87,8 @@
 }
 
 .folderRow,
-.folderRowActive {
+.folderRowActive,
+.folderRowDrop {
   display: grid;
   grid-template-columns: 16px 18px minmax(0, 1fr);
   gap: 5px;
@@ -103,12 +105,14 @@
 
 .folderRow:hover,
 .folderRowActive,
+.folderRowDrop,
 .treeFile:hover {
   background: var(--atria-active);
 }
 
 .folderRow span,
-.folderRowActive span {
+.folderRowActive span,
+.folderRowDrop span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
