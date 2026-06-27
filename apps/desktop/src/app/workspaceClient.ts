@@ -328,25 +328,11 @@ export function toWorkspaceFileAssetUrl(snapshot: WorkspaceSnapshot | undefined,
 function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
   const seed = createDefaultWorkspace();
   const folderPaths: Record<string, string> = {
-    projects: "Projects",
-    "project-archaicseeker": "Projects/ArchaicSeeker",
-    research: "Projects/ArchaicSeeker/01_Research",
-    analysis: "Projects/ArchaicSeeker/02_Analysis",
-    results: "Projects/ArchaicSeeker/03_Results",
-    timeline: "Timeline",
-    daily: "Timeline/Daily",
-    weekly: "Timeline/Weekly",
-    monthly: "Timeline/Monthly",
     notes: "Notes",
-    "html-results": "HTML Results",
+    reports: "Reports",
+    assets: "Assets",
     templates: "Templates",
   };
-  const pagePaths: Record<string, string> = {
-    "experiment-review-2026-05-28":
-      "Projects/ArchaicSeeker/03_Results/experiment-review-2026-05-28.atria.json",
-    "result-summary-2026-05-28": "Timeline/Daily/result-summary-2026-05-28.atria.json",
-  };
-  const artifactPath = "HTML Results/modern-reference-report.html";
 
   return WorkspaceSnapshotSchema.parse({
     ...seed,
@@ -363,13 +349,7 @@ function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
     pages: seed.pages.map((page) =>
       normalizePageContent({
         ...page,
-        filePath: pagePaths[page.id] ?? `Notes/${slugify(page.title, "note")}${LEGACY_PAGE_EXTENSION}`,
-      }),
-    ),
-    artifacts: seed.artifacts.map((artifact) =>
-      ArtifactSchema.parse({
-        ...artifact,
-        filePath: artifactPath,
+        filePath: `Notes/${slugify(page.title, "note")}${DOCUMENT_EXTENSION}`,
       }),
     ),
     tree: [],
@@ -397,21 +377,6 @@ async function materializeSeedWorkspace(rootPath: string, seed: WorkspaceSnapsho
       }),
     ),
   );
-
-  const artifact = seed.artifacts[0];
-  if (artifact?.filePath) {
-    let html = "";
-    try {
-      html = await fetch("/sample-artifacts/modern-reference-report.html").then((response) => response.text());
-    } catch {
-      html = "<!doctype html><html><body><h1>Atria HTML Result</h1></body></html>";
-    }
-    await invoke("atria_write_text_file", {
-      rootPath,
-      relativePath: artifact.filePath,
-      content: html,
-    });
-  }
 
   await saveWorkspace(seed);
 }
