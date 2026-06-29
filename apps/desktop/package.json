@@ -10,7 +10,7 @@
     "tauri:dev": "tauri dev",
     "mcp": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-mcp.ps1",
     "sidecar:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-sidecar.ps1",
-    "tauri:build": "pnpm sidecar:build && tauri build",
+    "tauri:build": "corepack pnpm sidecar:build && tauri build",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
