@@ -62,8 +62,12 @@
 }
 
 .sideTitle span {
+  min-width: 0;
+  overflow: hidden;
   color: var(--atria-muted);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fileTree {
@@ -311,6 +315,7 @@
 
 .pageMetaCompact {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 26px;
@@ -321,6 +326,7 @@
 .pageMetaCompact span {
   color: var(--atria-faint);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .pageMetaCompact input {
@@ -763,6 +769,14 @@
   background: #fbfbfa;
   color: var(--atria-muted);
   font-size: 12px;
+}
+
+.statusBar span {
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .blockBar {
