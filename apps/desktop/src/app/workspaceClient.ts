@@ -285,6 +285,18 @@ export async function deleteWorkspacePath(snapshot: WorkspaceSnapshot, relativeP
   });
 }
 
+export async function moveWorkspacePath(
+  snapshot: WorkspaceSnapshot,
+  fromRelativePath: string,
+  toRelativePath: string,
+): Promise<void> {
+  await invoke("atria_move_path", {
+    rootPath: snapshot.settings.workspacePath,
+    fromRelativePath,
+    toRelativePath,
+  });
+}
+
 export async function importImageDataUrl(snapshot: WorkspaceSnapshot, dataUrl: string): Promise<string> {
   const extension = extensionFromDataUrl(dataUrl);
   const relativePath = `Assets/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${extension}`;
