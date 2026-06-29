@@ -1,6 +1,6 @@
 [package]
 name = "atria"
-version = "0.1.0"
+version = "0.2.0"
 description = "A desktop-first HTML artifact workspace."
 authors = ["Atria"]
 edition = "2021"
