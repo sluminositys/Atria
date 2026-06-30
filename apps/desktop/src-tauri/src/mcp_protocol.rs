@@ -825,14 +825,16 @@ fn tool_definitions() -> Vec<Value> {
     tool("document_create", "Create a semantic rich document or a complete HTML artifact and commit it as an agent revision.", json!({
       "type": "object",
       "properties": {
-        "path": { "type": "string" }, "title": { "type": "string" }, "content": { "type": "string" },
+        "path": { "type": "string" },
+        "title": { "type": "string", "description": "Document title shown by Atria above the editable body." },
+        "content": { "type": "string", "description": "For rich-document, body HTML below the Atria title; do not repeat title as a leading h1. Give editable nodes stable data-atria-id attributes. For html-artifact, pass the complete standalone HTML document." },
         "kind": { "type": "string", "enum": ["rich-document", "html-artifact"], "default": "rich-document" },
         "tags": { "type": "array", "items": { "type": "string" } }, "documentId": { "type": "string" },
         "transactionId": { "type": "string" }, "intent": { "type": "string" }, "actor": actor_schema()
       }, "required": ["path", "title", "content"]
     })),
-    tool("document_replace", "Replace a document or rich-document body and commit the result. Pass baseRevision for optimistic concurrency.", mutation_schema(json!({ "content": { "type": "string" }, "title": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } } }), vec!["path", "content"])),
-    tool("document_patch", "Apply exact text or stable-node HTML patches and commit the result.", mutation_schema(json!({ "patches": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["replace-text", "replace-node", "insert-after"] }, "search": { "type": "string" }, "replacement": { "type": "string" }, "expectedOccurrences": { "type": "integer", "minimum": 1 }, "nodeId": { "type": "string" }, "html": { "type": "string" } }, "required": ["type"] } } }), vec!["path", "patches"])),
+    tool("document_replace", "Replace a complete HTML artifact or the body below a rich-document title and commit the result. Pass baseRevision for optimistic concurrency.", mutation_schema(json!({ "content": { "type": "string" }, "title": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } } }), vec!["path", "content"])),
+    tool("document_patch", "Apply exact text or data-atria-id stable-node HTML patches and commit the result.", mutation_schema(json!({ "patches": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["replace-text", "replace-node", "insert-after"] }, "search": { "type": "string" }, "replacement": { "type": "string" }, "expectedOccurrences": { "type": "integer", "minimum": 1 }, "nodeId": { "type": "string" }, "html": { "type": "string" } }, "required": ["type"] } } }), vec!["path", "patches"])),
     tool("document_delete", "Delete a document and commit the deletion.", mutation_schema(json!({}), vec!["path"])),
     tool("document_history", "List document-level Git revisions with actor and transaction provenance.", json!({ "type": "object", "properties": { "path": { "type": "string" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["path"] })),
     tool("document_diff", "Read a unified diff for one document between two revisions.", json!({ "type": "object", "properties": { "path": { "type": "string" }, "fromRevision": { "type": "string" }, "toRevision": { "type": "string" } }, "required": ["path"] })),
@@ -941,5 +943,29 @@ mod tests {
     .unwrap();
     assert!(next.contains(">New</section>"));
     assert!(!next.contains("Old"));
+  }
+
+  #[test]
+  fn tool_contract_names_the_editor_body_and_stable_id() {
+    let tools = tool_definitions();
+    let create = tools
+      .iter()
+      .find(|tool| tool["name"] == "document_create")
+      .unwrap();
+    let patch = tools
+      .iter()
+      .find(|tool| tool["name"] == "document_patch")
+      .unwrap();
+
+    assert!(
+      create["inputSchema"]["properties"]["content"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("do not repeat title")
+    );
+    assert!(patch["description"]
+      .as_str()
+      .unwrap()
+      .contains("data-atria-id"));
   }
 }
