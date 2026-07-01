@@ -60,8 +60,6 @@ const blockPalette: Array<{
   { type: "latex", label: "LaTeX", icon: Sigma },
   { type: "custom-html", label: "HTML", icon: Code2 },
   { type: "drawing", label: "Drawing", icon: PenTool },
-  { type: "timeline", label: "Timeline", icon: Hash },
-  { type: "metric-card", label: "Metric", icon: Hash },
 ];
 
 export function App() {

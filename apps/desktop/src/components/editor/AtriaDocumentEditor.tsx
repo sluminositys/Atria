@@ -55,6 +55,7 @@ import {
 import { TableInteractionView } from "./interaction/TableInteractionView";
 import { StableNodeId } from "./extensions/StableNodeId";
 import { DrawingNodeView } from "./nodes/DrawingNodeView";
+import { insertBlockAtSelection } from "./commands/selectionCommands";
 import styles from "../../app/App.module.css";
 
 interface AtriaDocumentEditorProps {
@@ -271,24 +272,19 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       setImageInsertError("Editor is not ready.");
       return false;
     }
-    currentEditor
-      .chain()
-      .focus()
-      .insertContent({
+    insertBlockAtSelection(currentEditor, {
         type: "atriaImage",
         attrs: { src: cleanSrc, alt, caption: "", width: 640, layout: "normal", align: "center" },
-      })
-      .run();
+      });
     setImageInsertError("");
     setImageDialogOpen(false);
     return true;
   }
 
   function insertArtifact(artifact: Artifact) {
-    editorRef.current
-      ?.chain()
-      .focus()
-      .insertContent({
+    const current = editorRef.current;
+    if (!current) return;
+    insertBlockAtSelection(current, {
         type: "atriaArtifact",
         attrs: {
           artifactId: artifact.id,
@@ -299,8 +295,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           layout: "wide",
           align: "center",
         },
-      })
-      .run();
+      });
   }
 
   function executeSlashCommand(command: SlashCommand) {
@@ -308,7 +303,21 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     if (!current || !slash) return;
     current.chain().focus().deleteRange(slash.range).run();
     setSlash(null);
-    insertFromPalette(command);
+    applySlashCommand(command);
+  }
+
+  function applySlashCommand(command: SlashCommand) {
+    const current = editorRef.current;
+    if (!current) return;
+    if (command === "paragraph") current.chain().focus().setParagraph().run();
+    else if (command === "heading-1") current.chain().focus().setHeading({ level: 1 }).run();
+    else if (command === "heading-2") current.chain().focus().setHeading({ level: 2 }).run();
+    else if (command === "heading-3") current.chain().focus().setHeading({ level: 3 }).run();
+    else if (command === "todo") current.chain().focus().toggleTaskList().run();
+    else if (command === "quote") current.chain().focus().toggleBlockquote().run();
+    else if (command === "code") {
+      current.chain().focus().setCodeBlock({ language: "text" }).run();
+    } else insertFromPalette(command);
   }
 
   function insertFromPalette(type: AtriaBlockType | SlashCommand) {
@@ -318,23 +327,20 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     switch (type) {
       case "paragraph":
       case "text":
-        current.chain().focus().setParagraph().run();
+        insertBlockAtSelection(current, { type: "paragraph" });
         return;
       case "heading":
       case "heading-1":
-        current.chain().focus().toggleHeading({ level: 1 }).run();
+        insertBlockAtSelection(current, { type: "heading", attrs: { level: 1 } });
         return;
       case "heading-2":
-        current.chain().focus().toggleHeading({ level: 2 }).run();
+        insertBlockAtSelection(current, { type: "heading", attrs: { level: 2 } });
         return;
       case "heading-3":
-        current.chain().focus().toggleHeading({ level: 3 }).run();
+        insertBlockAtSelection(current, { type: "heading", attrs: { level: 3 } });
         return;
       case "todo":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "taskList",
             content: [
               {
@@ -343,17 +349,13 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
                 content: [{ type: "paragraph" }],
               },
             ],
-          })
-          .run();
+          });
         return;
       case "quote":
-        current.chain().focus().toggleBlockquote().run();
+        insertBlockAtSelection(current, { type: "blockquote", content: [{ type: "paragraph" }] });
         return;
       case "code":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "codeBlock",
             attrs: {
               language: "text",
@@ -363,30 +365,21 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
               layout: "normal",
               align: "left",
             },
-          })
-          .run();
+          });
         return;
       case "callout":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaCallout",
             attrs: { tone: "info", title: "Note", width: null, layout: "normal", align: "left" },
             content: [{ type: "paragraph" }],
-          })
-          .run();
+          });
         return;
       case "card":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaCard",
-            attrs: { title: "Card", width: null, layout: "normal", align: "left" },
+            attrs: { title: "", width: null, layout: "normal", align: "left" },
             content: [{ type: "paragraph" }],
-          })
-          .run();
+          });
         return;
       case "artifact":
         setArtifactPickerOpen(true);
@@ -395,27 +388,28 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         setImageDialogOpen(true);
         return;
       case "table":
-        current.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        insertBlockAtSelection(current, {
+          type: "table",
+          content: Array.from({ length: 3 }, (_, rowIndex) => ({
+            type: "tableRow",
+            content: Array.from({ length: 3 }, () => ({
+              type: rowIndex === 0 ? "tableHeader" : "tableCell",
+              content: [{ type: "paragraph" }],
+            })),
+          })),
+        });
         return;
       case "mermaid":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaMermaid",
             attrs: { code: "graph TD\n  A[Atria] --> B[Artifact]", width: 760, height: 260, layout: "wide", align: "center" },
-          })
-          .run();
+          });
         return;
       case "latex":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaLatex",
             attrs: { formula: "E = mc^2", display: true, width: 520, layout: "normal", align: "center" },
-          })
-          .run();
+          });
         return;
       case "inline-math": {
         const { from, to } = current.state.selection;
@@ -430,42 +424,25 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       }
       case "custom-html":
       case "html":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaHtml",
             attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" },
-          })
-          .run();
+          });
         return;
       case "drawing":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaDrawing",
             attrs: { scene: [], width: 820, height: 480, layout: "wide", align: "center" },
-          })
-          .run();
+          });
         return;
       case "timeline":
-        current
-          .chain()
-          .focus()
-          .insertContent({ type: "atriaTimeline", attrs: { items: [], width: 760, layout: "wide", align: "left" } })
-          .run();
+        insertBlockAtSelection(current, { type: "atriaTimeline", attrs: { items: [], width: 760, layout: "wide", align: "left" } });
         return;
-      case "metric":
       case "metric-card":
-        current
-          .chain()
-          .focus()
-          .insertContent({
+        insertBlockAtSelection(current, {
             type: "atriaMetric",
             attrs: { label: "Metric", value: "0", delta: "", width: 240, layout: "normal", align: "left" },
-          })
-          .run();
+          });
         return;
       default:
         return;

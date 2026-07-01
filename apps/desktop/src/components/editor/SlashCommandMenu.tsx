@@ -32,9 +32,7 @@ export type SlashCommand =
   | "inline-math"
   | "latex"
   | "html"
-  | "drawing"
-  | "timeline"
-  | "metric";
+  | "drawing";
 
 export interface SlashMenuState {
   x: number;
@@ -63,8 +61,6 @@ const commands: Array<{
   { command: "callout", label: "Callout", group: "AI Workspace", icon: FileText },
   { command: "card", label: "Result Card", group: "AI Workspace", icon: PanelTop },
   { command: "artifact", label: "Artifact", group: "AI Workspace", icon: FileCode2 },
-  { command: "metric", label: "Metric Card", group: "AI Workspace", icon: Hash },
-  { command: "timeline", label: "Timeline", group: "AI Workspace", icon: Hash },
   { command: "image", label: "Image", group: "Media", icon: Image },
   { command: "table", label: "Table", group: "Media", icon: Table2 },
   { command: "mermaid", label: "Mermaid", group: "Media", icon: Hash },
