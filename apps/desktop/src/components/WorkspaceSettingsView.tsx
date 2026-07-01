@@ -19,7 +19,6 @@ interface WorkspaceSettingsViewProps {
 
 export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsViewProps) {
   const currentPath = snapshot.settings.workspacePath;
-  const [path, setPath] = useState(currentPath);
   const [recentPaths, setRecentPaths] = useState(() => readRecentWorkspaces(currentPath));
   const [bridge, setBridge] = useState<AgentBridgeInfo>();
   const [gitStatus, setGitStatus] = useState<{ branch?: string; head?: string; initialized: boolean }>();
@@ -28,7 +27,6 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setPath(currentPath);
     setRecentPaths(rememberWorkspace(currentPath));
   }, [currentPath]);
 
@@ -77,7 +75,7 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
   }
 
   async function browseWorkspace() {
-    const selected = await pickWorkspaceDirectory(path || currentPath);
+    const selected = await pickWorkspaceDirectory(currentPath);
     if (selected) await openWorkspace(selected);
   }
 
@@ -108,25 +106,17 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
           </div>
           <div className={styles.settingsSectionContent}>
             <div className={styles.workspacePathControl}>
-              <input
-                aria-label="Workspace path"
-                value={path}
-                spellCheck={false}
-                onChange={(event) => setPath(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void openWorkspace(path);
-                }}
-              />
-              <button type="button" title="Browse folders" onClick={() => void browseWorkspace()}>
+              <div className={styles.workspaceLocationLabel}>
                 <FolderOpen size={16} />
-              </button>
+                <span>{workspaceName(currentPath)}</span>
+              </div>
               <button
                 type="button"
                 className={styles.settingsPrimaryButton}
-                disabled={!path.trim() || busy}
-                onClick={() => void openWorkspace(path)}
+                disabled={busy}
+                onClick={() => void browseWorkspace()}
               >
-                {busy ? <LoaderCircle className={styles.spin} size={15} /> : "Open"}
+                {busy ? <LoaderCircle className={styles.spin} size={15} /> : "Change"}
               </button>
             </div>
             {error && <div className={styles.settingsError}>{error}</div>}
@@ -141,7 +131,7 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
                   onClick={() => void openWorkspace(recentPath)}
                 >
                   <FolderOpen size={14} />
-                  <span>{recentPath}</span>
+                  <span>{workspaceName(recentPath)}</span>
                   {samePath(recentPath, currentPath) && <Check size={14} />}
                 </button>
               ))}
@@ -183,7 +173,7 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
               <strong>{bridge ? (bridge.available ? "Ready" : "Missing") : "Checking"}</strong>
             </div>
             <div className={styles.agentBridgePath}>
-              <code>{bridge?.executablePath ?? "Resolving executable"}</code>
+              <span>{bridge ? (bridge.available ? "Bundled with Atria" : "Not available") : "Checking"}</span>
               <button
                 type="button"
                 disabled={!bridge?.available}
@@ -229,4 +219,9 @@ function uniquePaths(paths: string[]): string[] {
 
 function samePath(left: string, right: string): boolean {
   return left.replace(/[\\/]+$/, "").toLowerCase() === right.replace(/[\\/]+$/, "").toLowerCase();
+}
+
+function workspaceName(path: string): string {
+  const normalized = path.trim().replace(/[\\/]+$/, "");
+  return normalized.split(/[\\/]/).pop() || "Local workspace";
 }

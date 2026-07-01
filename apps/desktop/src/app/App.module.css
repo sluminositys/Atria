@@ -897,7 +897,7 @@
   height: calc(100vh - 58px);
   min-height: 0;
   display: grid;
-  grid-template-rows: 26px 218px minmax(0, 1fr);
+  grid-template-rows: 270px minmax(0, 1fr);
   overflow: hidden;
   padding: 0 10px 14px;
 }
@@ -932,7 +932,7 @@
 
 .documentGraphCanvas {
   width: 100%;
-  height: 218px;
+  height: 270px;
   display: block;
   border-bottom: 1px solid var(--atria-soft-line);
   background: #fbfbfa;
@@ -955,23 +955,33 @@
   outline: none;
 }
 
-.graphHumanNode,
-.graphAgentNode {
+.graphDocumentNode,
+.graphArtifactNode {
   fill: #2f343b;
   stroke: white;
   stroke-width: 2;
-  transition: r 120ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 120ms ease;
 }
 
-.graphAgentNode {
+.graphArtifactNode {
   fill: #477f7d;
 }
 
-.graphNode:hover .graphHumanNode,
-.graphNode:hover .graphAgentNode,
-.graphNode:focus .graphHumanNode,
-.graphNode:focus .graphAgentNode {
-  r: 9px;
+.graphNode:hover .graphDocumentNode,
+.graphNode:hover .graphArtifactNode,
+.graphNode:focus .graphDocumentNode,
+.graphNode:focus .graphArtifactNode {
+  transform: scale(1.24);
+}
+
+.graphNodeLabel {
+  max-width: 92px;
+  fill: #5c626a;
+  font-size: 9px;
+  letter-spacing: 0;
+  pointer-events: none;
 }
 
 .graphActiveRing {
@@ -990,11 +1000,18 @@
   padding-top: 8px;
 }
 
+.graphRelations > strong {
+  padding: 2px 6px 6px;
+  color: var(--atria-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
 .graphRelations button {
   min-width: 0;
   height: 34px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 14px minmax(0, 1fr) 40px;
+  grid-template-columns: 16px minmax(0, 1fr) 14px minmax(0, 1fr) 52px;
   align-items: center;
   gap: 4px;
   padding: 0 6px;
@@ -1199,8 +1216,28 @@
 .workspacePathControl {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px 62px;
+  grid-template-columns: minmax(0, 1fr) 72px;
   gap: 6px;
+}
+
+.workspaceLocationLabel {
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #fafafa;
+  color: var(--atria-text);
+}
+
+.workspaceLocationLabel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspacePathControl input {

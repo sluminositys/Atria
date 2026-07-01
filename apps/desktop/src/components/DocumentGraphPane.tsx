@@ -5,9 +5,9 @@ import { WorkspaceSnapshot } from "@atria/schema";
 import { useAtriaStore } from "../app/store";
 import styles from "../app/App.module.css";
 
-const GRAPH_WIDTH = 286;
-const GRAPH_HEIGHT = 218;
-const GRAPH_NODE_LIMIT = 22;
+const GRAPH_WIDTH = 300;
+const GRAPH_HEIGHT = 270;
+const GRAPH_NODE_LIMIT = 12;
 
 interface PositionedNode extends DocumentGraphNode {
   x: number;
@@ -31,14 +31,10 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
   return (
     <>
       <div className={styles.sideTitle}>
-        <strong>Graph</strong>
-        <span>{graph.nodes.length} files · {graph.edges.length} links</span>
+        <strong>File relations</strong>
+        <span>{graph.nodes.length} files · {graph.edges.length} connections</span>
       </div>
       <div className={styles.documentGraphPane}>
-        <div className={styles.graphLegend}>
-          <span><i className={styles.graphHumanSwatch} />Human</span>
-          <span><i className={styles.graphAgentSwatch} />Agent</span>
-        </div>
         <svg
           className={styles.documentGraphCanvas}
           viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
@@ -73,13 +69,22 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
                   if (event.key === "Enter" || event.key === " ") openGraphNode(node);
                 }}
               >
-                <circle
-                  className={node.source === "ai" ? styles.graphAgentNode : styles.graphHumanNode}
-                  cx={node.x}
-                  cy={node.y}
-                  r={active ? 9 : 6.5}
-                />
+                {node.type === "artifact" ? (
+                  <rect
+                    className={styles.graphArtifactNode}
+                    x={node.x - (active ? 8 : 6)}
+                    y={node.y - (active ? 8 : 6)}
+                    width={active ? 16 : 12}
+                    height={active ? 16 : 12}
+                    rx="2"
+                  />
+                ) : (
+                  <circle className={styles.graphDocumentNode} cx={node.x} cy={node.y} r={active ? 8 : 6} />
+                )}
                 {active && <circle className={styles.graphActiveRing} cx={node.x} cy={node.y} r={13} />}
+                <text className={styles.graphNodeLabel} x={node.x} y={node.y + (active ? 27 : 22)} textAnchor="middle">
+                  {compactTitle(node.title)}
+                </text>
                 <title>{node.title}</title>
               </g>
             );
@@ -87,6 +92,7 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
         </svg>
 
         <div className={styles.graphRelations}>
+          <strong>Connections</strong>
           {graph.edges.slice(0, 30).map((edge) => {
             const source = nodesById.get(edge.sourceId);
             const target = nodesById.get(edge.targetId);
@@ -102,12 +108,12 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
                 <span>{source.title}</span>
                 <ArrowRight size={12} />
                 <span>{target.title}</span>
-                <small>{edge.kind}</small>
+                <small>{edge.kind === "embed" ? "Embedded" : "Linked"}</small>
               </button>
             );
           })}
           {graph.edges.length === 0 && (
-            <div className={styles.graphEmpty}>No document links</div>
+            <div className={styles.graphEmpty}>No connections</div>
           )}
         </div>
       </div>
@@ -125,7 +131,19 @@ function positionNodes(
     degree.set(edge.sourceId, (degree.get(edge.sourceId) ?? 0) + 1);
     degree.set(edge.targetId, (degree.get(edge.targetId) ?? 0) + 1);
   }
-  const visible = [...nodes]
+  const connectedIds = activeId
+    ? new Set(
+        edges.flatMap((edge) => {
+          if (edge.sourceId === activeId) return [edge.targetId];
+          if (edge.targetId === activeId) return [edge.sourceId];
+          return [];
+        }),
+      )
+    : new Set<string>();
+  const candidates = activeId && connectedIds.size
+    ? nodes.filter((node) => node.id === activeId || connectedIds.has(node.id))
+    : nodes;
+  const visible = [...candidates]
     .sort((left, right) => {
       if (left.id === activeId) return -1;
       if (right.id === activeId) return 1;
@@ -137,7 +155,7 @@ function positionNodes(
   const centerX = GRAPH_WIDTH / 2;
   const centerY = GRAPH_HEIGHT / 2;
   const radiusX = 112;
-  const radiusY = 78;
+  const radiusY = 88;
   const positioned = visible.map((node, index) => {
     const angle = -Math.PI / 2 + (index / Math.max(visible.length, 1)) * Math.PI * 2;
     return {
@@ -148,4 +166,9 @@ function positionNodes(
   });
   if (active) positioned.unshift({ ...active, x: centerX, y: centerY });
   return positioned;
+}
+
+function compactTitle(title: string): string {
+  const clean = title.trim() || "Untitled";
+  return clean.length > 16 ? `${clean.slice(0, 15)}…` : clean;
 }
