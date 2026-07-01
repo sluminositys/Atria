@@ -151,7 +151,6 @@ export function App() {
             <div key={tab.key} className={tab.key === activeTabKey ? styles.tabActive : styles.tab}>
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
                 <span>{tab.title}</span>
-                <small>{tab.source === "ai" ? "AI" : "Human"}</small>
               </button>
               <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
                 x
@@ -213,7 +212,7 @@ export function App() {
         <>
           <div className={styles.sideTitle}>
             <strong>{current.title}</strong>
-            <span>{current.settings.workspacePath}</span>
+            <span>{current.pages.length + current.artifacts.length} files</span>
           </div>
           <FileTree snapshot={current} />
         </>

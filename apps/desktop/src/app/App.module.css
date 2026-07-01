@@ -1199,8 +1199,28 @@
 .workspacePathControl {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px 62px;
+  grid-template-columns: minmax(0, 1fr) 72px;
   gap: 6px;
+}
+
+.workspaceLocationLabel {
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #fafafa;
+  color: var(--atria-text);
+}
+
+.workspaceLocationLabel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspacePathControl input {
