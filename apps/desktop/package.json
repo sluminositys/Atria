@@ -11,7 +11,8 @@
     "mcp": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-mcp.ps1",
     "sidecar:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-sidecar.ps1",
     "tauri:build": "tauri build",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
   },
   "dependencies": {
     "@atria/core": "workspace:*",
@@ -51,6 +52,7 @@
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.5.1",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.2"
   }
 }

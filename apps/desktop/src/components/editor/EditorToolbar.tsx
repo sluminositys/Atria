@@ -37,7 +37,7 @@ interface EditorToolbarProps {
 
 export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
   const [, refresh] = useReducer((value: number) => value + 1, 0);
-  const textSelected = hasTextSelection(editor);
+  const textSelected = hasTextSelection(editor.state.selection);
 
   useEffect(() => {
     editor.on("selectionUpdate", refresh);
