@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { AtriaBlockType } from "@atria/schema";
 import type { SlashCommand } from "./SlashCommandMenu";
+import { hasTextSelection } from "./commands/selectionCommands";
 import styles from "../../app/App.module.css";
 
 interface EditorToolbarProps {
@@ -36,6 +37,7 @@ interface EditorToolbarProps {
 
 export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
   const [, refresh] = useReducer((value: number) => value + 1, 0);
+  const textSelected = hasTextSelection(editor.state.selection);
 
   useEffect(() => {
     editor.on("selectionUpdate", refresh);
@@ -57,6 +59,7 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
         className={styles.toolbarSelect}
         aria-label="Text style"
         value={currentBlockStyle(editor)}
+        disabled={!textSelected}
         onChange={(event) => setBlockStyle(editor, event.target.value)}
       >
         <option value="paragraph">Paragraph</option>
@@ -75,34 +78,34 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
       </ToolbarGroup>
 
       <ToolbarGroup>
-        <ToolbarButton label="Bold" active={editor.isActive("bold")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBold().run())}>
+        <ToolbarButton label="Bold selected text" disabled={!textSelected} active={editor.isActive("bold")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBold().run())}>
           <Bold size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Italic" active={editor.isActive("italic")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleItalic().run())}>
+        <ToolbarButton label="Italicize selected text" disabled={!textSelected} active={editor.isActive("italic")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleItalic().run())}>
           <Italic size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Strikethrough" active={editor.isActive("strike")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleStrike().run())}>
+        <ToolbarButton label="Strike selected text" disabled={!textSelected} active={editor.isActive("strike")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleStrike().run())}>
           <Strikethrough size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Inline code" active={editor.isActive("code")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
+        <ToolbarButton label="Inline code for selected text" disabled={!textSelected} active={editor.isActive("code")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
           <Code2 size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Link" active={editor.isActive("link")} onMouseDown={(event) => run(event, () => setLink(editor))}>
+        <ToolbarButton label="Link selected text" disabled={!textSelected} active={editor.isActive("link")} onMouseDown={(event) => run(event, () => setLink(editor))}>
           <LinkIcon size={15} />
         </ToolbarButton>
       </ToolbarGroup>
 
       <ToolbarGroup>
-        <ToolbarButton label="Bullet list" active={editor.isActive("bulletList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBulletList().run())}>
+        <ToolbarButton label="Bullet list for selected paragraphs" disabled={!textSelected} active={editor.isActive("bulletList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBulletList().run())}>
           <List size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Numbered list" active={editor.isActive("orderedList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleOrderedList().run())}>
+        <ToolbarButton label="Numbered list for selected paragraphs" disabled={!textSelected} active={editor.isActive("orderedList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleOrderedList().run())}>
           <ListOrdered size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Todo list" active={editor.isActive("taskList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleTaskList().run())}>
+        <ToolbarButton label="Todo list for selected paragraphs" disabled={!textSelected} active={editor.isActive("taskList")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleTaskList().run())}>
           <CheckSquare size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Quote" active={editor.isActive("blockquote")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBlockquote().run())}>
+        <ToolbarButton label="Quote selected paragraphs" disabled={!textSelected} active={editor.isActive("blockquote")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleBlockquote().run())}>
           <Quote size={15} />
         </ToolbarButton>
       </ToolbarGroup>

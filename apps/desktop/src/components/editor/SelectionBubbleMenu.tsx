@@ -1,5 +1,6 @@
 import { useState, type MouseEvent } from "react";
 import { BubbleMenu, type Editor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import {
   Bold,
   CheckSquare,
@@ -33,7 +34,11 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
   return (
     <BubbleMenu
       editor={editor}
-      shouldShow={({ editor }) => editor.isEditable && !editor.state.selection.empty}
+      shouldShow={({ editor }) =>
+        editor.isEditable
+        && editor.state.selection instanceof TextSelection
+        && !editor.state.selection.empty
+      }
       tippyOptions={{
         duration: 120,
         placement: "top",
@@ -62,7 +67,7 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
       <button className={editor.isActive("italic") ? styles.menuButtonActive : styles.menuButton} title="Italic" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleItalic().run())}>
         <Italic size={14} />
       </button>
-      <button className={editor.isActive("code") ? styles.menuButtonActive : styles.menuButton} title="Inline code" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
+      <button className={editor.isActive("code") ? styles.menuButtonActive : styles.menuButton} title="Inline code for selected text" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
         <Code2 size={14} />
       </button>
       <button className={styles.menuButton} title="Link" onMouseDown={(event) => run(event, () => setLink(editor))}>
