@@ -12,6 +12,7 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
+import { Selection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { createLowlight } from "lowlight";
 import bash from "highlight.js/lib/languages/bash";
@@ -54,6 +55,7 @@ import {
 } from "./nodes/StructuredNodeViews";
 import { TableInteractionView } from "./interaction/TableInteractionView";
 import { StableNodeId } from "./extensions/StableNodeId";
+import { TrailingParagraph } from "./extensions/TrailingParagraph";
 import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
 import styles from "../../app/App.module.css";
@@ -190,6 +192,13 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           return true;
         },
         handleDOMEvents: {
+          click(view, event) {
+            if (event.target !== view.dom) return false;
+            const end = view.state.doc.content.size;
+            view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(end), -1)));
+            view.focus();
+            return true;
+          },
           contextmenu(_view, event) {
             event.preventDefault();
             setSlash(null);
@@ -492,6 +501,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
   return [
     StableNodeId,
+    TrailingParagraph,
     StarterKit.configure({
       codeBlock: false,
       heading: { levels: [1, 2, 3, 4] },

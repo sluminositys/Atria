@@ -63,7 +63,7 @@ export function PageEditor({ page, artifacts, snapshot }: PageEditorProps) {
         </div>
       </div>
       <AtriaDocumentEditor
-        value={page.html ?? page.content ?? createEmptyDocument()}
+        value={page.content ?? page.html ?? createEmptyDocument()}
         artifacts={artifacts}
         snapshot={snapshot}
         onChange={(content, html) => updatePage(page.id, { content, html })}
