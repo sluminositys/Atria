@@ -3090,6 +3090,13 @@
   text-transform: uppercase;
 }
 
+.slashEmpty {
+  padding: 14px 12px;
+  color: var(--atria-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .editorContextMenu button,
 .slashItem,
 .slashItemActive {

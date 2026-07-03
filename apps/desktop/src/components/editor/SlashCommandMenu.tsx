@@ -38,6 +38,7 @@ export interface SlashMenuState {
   x: number;
   y: number;
   selectedIndex: number;
+  query: string;
 }
 
 interface SlashCommandMenuProps {
@@ -70,8 +71,8 @@ const commands: Array<{
   { command: "drawing", label: "Drawing", group: "Media", icon: PenTool },
 ];
 
-export function slashCommandCount(): number {
-  return commands.length;
+export function slashCommandCount(query = ""): number {
+  return filteredCommands(query).length;
 }
 
 export function SlashCommandMenu({ state, onSelect }: SlashCommandMenuProps) {
@@ -83,10 +84,11 @@ export function SlashCommandMenu({ state, onSelect }: SlashCommandMenuProps) {
 
   if (!state) return null;
 
+  const visibleCommands = filteredCommands(state.query);
   let lastGroup = "";
   return (
     <div className={styles.slashMenu} style={{ left: state.x, top: state.y }}>
-      {commands.map((item, index) => {
+      {visibleCommands.map((item, index) => {
         const Icon = item.icon;
         const showGroup = item.group !== lastGroup;
         lastGroup = item.group;
@@ -107,10 +109,19 @@ export function SlashCommandMenu({ state, onSelect }: SlashCommandMenuProps) {
           </div>
         );
       })}
+      {!visibleCommands.length && <div className={styles.slashEmpty}>No matching blocks</div>}
     </div>
   );
 }
 
-export function slashCommandAt(index: number): SlashCommand {
-  return commands[index]?.command ?? commands[0]!.command;
+export function slashCommandAt(index: number, query = ""): SlashCommand {
+  return filteredCommands(query)[index]?.command ?? commands[0]!.command;
+}
+
+function filteredCommands(query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return commands;
+  return commands.filter((item) =>
+    `${item.label} ${item.group} ${item.command}`.toLowerCase().includes(normalized),
+  );
 }

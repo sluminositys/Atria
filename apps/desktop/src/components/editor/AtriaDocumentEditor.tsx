@@ -112,6 +112,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
+  const slashRef = useRef<SlashState | null>(null);
 
   const workspacePath = snapshot?.settings.workspacePath ?? "";
   const assetSnapshot = useMemo(
@@ -134,41 +135,42 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
             x: coords.left,
             y: coords.bottom + 8,
             selectedIndex: 0,
+            query: "",
             range: { from, to: from + 1 },
           });
+          slashRef.current = {
+            x: coords.left,
+            y: coords.bottom + 8,
+            selectedIndex: 0,
+            query: "",
+            range: { from, to: from + 1 },
+          };
           return false;
         },
         handleKeyDown(_view, event) {
-          if (slash) {
+          const slashMenu = slashRef.current;
+          if (slashMenu) {
+            const commandCount = slashCommandCount(slashMenu.query);
             if (event.key === "ArrowDown") {
               event.preventDefault();
-              setSlash((current) =>
-                current
-                  ? { ...current, selectedIndex: (current.selectedIndex + 1) % slashCommandCount() }
-                  : current,
-              );
+              if (commandCount) setSlashState({ ...slashMenu, selectedIndex: (slashMenu.selectedIndex + 1) % commandCount });
               return true;
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
-              setSlash((current) =>
-                current
-                  ? {
-                      ...current,
-                      selectedIndex: (current.selectedIndex - 1 + slashCommandCount()) % slashCommandCount(),
-                    }
-                  : current,
-              );
+              if (commandCount) {
+                setSlashState({ ...slashMenu, selectedIndex: (slashMenu.selectedIndex - 1 + commandCount) % commandCount });
+              }
               return true;
             }
             if (event.key === "Enter") {
               event.preventDefault();
-              executeSlashCommand(slashCommandAt(slash.selectedIndex));
+              if (commandCount) executeSlashCommand(slashCommandAt(slashMenu.selectedIndex, slashMenu.query));
               return true;
             }
             if (event.key === "Escape") {
               event.preventDefault();
-              setSlash(null);
+              setSlashState(null);
               return true;
             }
           }
@@ -208,6 +210,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         },
       },
       onUpdate({ editor }) {
+        updateSlashQuery(editor);
         onChange(editor.getJSON() as AtriaDocumentContent, editor.getHTML());
       },
       onSelectionUpdate() {
@@ -246,6 +249,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   useEffect(() => {
     function closeMenus() {
       setContextMenu(null);
+      setSlashState(null);
     }
     window.addEventListener("click", closeMenus);
     return () => window.removeEventListener("click", closeMenus);
@@ -309,10 +313,35 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   function executeSlashCommand(command: SlashCommand) {
     const current = editorRef.current;
-    if (!current || !slash) return;
-    current.chain().focus().deleteRange(slash.range).run();
-    setSlash(null);
+    const slashMenu = slashRef.current;
+    if (!current || !slashMenu) return;
+    current.chain().focus().deleteRange(slashMenu.range).run();
+    setSlashState(null);
     applySlashCommand(command);
+  }
+
+  function setSlashState(next: SlashState | null) {
+    slashRef.current = next;
+    setSlash(next);
+  }
+
+  function updateSlashQuery(current: Editor) {
+    const slashMenu = slashRef.current;
+    if (!slashMenu || !current.state.selection.empty) return;
+    const cursor = current.state.selection.from;
+    if (cursor < slashMenu.range.from + 1) {
+      setSlashState(null);
+      return;
+    }
+    const typed = current.state.doc.textBetween(slashMenu.range.from, cursor, "\n", "\n");
+    if (!typed.startsWith("/") || /\s/.test(typed.slice(1))) {
+      setSlashState(null);
+      return;
+    }
+    const query = typed.slice(1);
+    if (query !== slashMenu.query || cursor !== slashMenu.range.to) {
+      setSlashState({ ...slashMenu, query, selectedIndex: 0, range: { ...slashMenu.range, to: cursor } });
+    }
   }
 
   function applySlashCommand(command: SlashCommand) {
