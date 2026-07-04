@@ -19,12 +19,14 @@ type ImageNodeViewProps = NodeViewProps & {
 const calloutTones = ["info", "note", "success", "warning", "danger"] as const;
 
 export function CardNodeView(props: NodeViewProps) {
-  const title = String(props.node.attrs.title ?? "Card");
+  const title = String(props.node.attrs.title ?? "");
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 260 }}>
         <section className={styles.documentCardNode}>
-          <EditableNodeTitle value={title} placeholder="Card title" onCommit={(value) => props.updateAttributes({ title: value || "Card" })} />
+          {(title || props.selected) && (
+            <EditableNodeTitle value={title} placeholder="Optional title" onCommit={(value) => props.updateAttributes({ title: value })} />
+          )}
           <NodeViewContent className={styles.nodeRichBody} />
         </section>
       </DirectManipulationLayer>

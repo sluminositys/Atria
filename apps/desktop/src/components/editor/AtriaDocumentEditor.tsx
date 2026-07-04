@@ -668,7 +668,7 @@ function createCardNode() {
     draggable: true,
     addAttributes() {
       return {
-        title: { default: "Card" },
+        title: { default: "" },
         ...sizeAttributes,
         ...layoutAttributes,
       };
