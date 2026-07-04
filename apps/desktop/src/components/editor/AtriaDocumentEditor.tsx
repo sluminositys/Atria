@@ -568,6 +568,11 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
             parseHTML: (element: HTMLElement) => element.getAttribute("data-align") ?? "center",
             renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": attrs.align }),
           },
+          offsetX: {
+            default: 0,
+            parseHTML: (element: HTMLElement) => Number(element.getAttribute("data-offset-x") ?? 0),
+            renderHTML: (attrs: Record<string, unknown>) => Number(attrs.offsetX) ? { "data-offset-x": attrs.offsetX } : {},
+          },
         };
       },
     }).configure({
@@ -627,6 +632,16 @@ const layoutAttributes = {
     default: "left",
     parseHTML: (element: HTMLElement) => element.getAttribute("data-align") ?? "left",
     renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": attrs.align }),
+  },
+  offsetX: {
+    default: 0,
+    parseHTML: (element: HTMLElement) => Number(element.getAttribute("data-offset-x") ?? 0),
+    renderHTML: (attrs: Record<string, unknown>) => Number(attrs.offsetX) ? { "data-offset-x": attrs.offsetX } : {},
+  },
+  offsetY: {
+    default: 0,
+    parseHTML: (element: HTMLElement) => Number(element.getAttribute("data-offset-y") ?? 0),
+    renderHTML: (attrs: Record<string, unknown>) => Number(attrs.offsetY) ? { "data-offset-y": attrs.offsetY } : {},
   },
 };
 

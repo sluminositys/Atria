@@ -2,7 +2,7 @@ import { TableView } from "@tiptap/extension-table";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { EditorView, NodeView, ViewMutationRecord } from "@tiptap/pm/view";
-import { clamp, cssDimension, type NodeAlign, type NodeLayout } from "./nodeLayout";
+import { cssDimension, dimensionToNumber, horizontalResize, type NodeAlign, type NodeLayout } from "./nodeLayout";
 import styles from "../../../app/App.module.css";
 
 function style(name: string): string {
@@ -116,15 +116,23 @@ export class TableInteractionView extends TableView implements NodeView {
     const startX = event.clientX;
     const startWidth = rect.width;
     const maxWidth = Math.min(1280, Math.max(360, editorRect.width - 24));
+    const tablePosition = this.findTablePos();
+    const tableNode = tablePosition === null ? null : this.view.state.doc.nodeAt(tablePosition);
+    const attrs = tableNode?.attrs as { align?: NodeAlign; offsetX?: number | string | null } | undefined;
+    const align = attrs?.align ?? "center";
+    const startOffsetX = dimensionToNumber(attrs?.offsetX) ?? 0;
     let nextWidth = startWidth;
+    let nextOffsetX = startOffsetX;
 
     document.body.classList.add("atria-resizing");
 
     const onMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
-      const rawWidth = edge === "w" ? startWidth - dx : startWidth + dx;
-      nextWidth = Math.round(clamp(rawWidth, 320, maxWidth));
+      const resized = horizontalResize(startWidth, startOffsetX, dx, edge, align, 320, maxWidth);
+      nextWidth = resized.size;
+      nextOffsetX = resized.offset;
       this.dom.style.width = `${nextWidth}px`;
+      this.dom.style.translate = `${nextOffsetX}px 0`;
     };
 
     const onEnd = () => {
@@ -132,7 +140,7 @@ export class TableInteractionView extends TableView implements NodeView {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
-      this.updateTableAttrs({ width: nextWidth });
+      this.updateTableAttrs({ width: nextWidth, offsetX: nextOffsetX });
     };
 
     window.addEventListener("pointermove", onMove);
@@ -165,10 +173,16 @@ export class TableInteractionView extends TableView implements NodeView {
   }
 
   private syncLayout(node: ProseMirrorNode) {
-    const attrs = node.attrs as { layout?: NodeLayout; align?: NodeAlign; width?: number | string | null };
+    const attrs = node.attrs as {
+      layout?: NodeLayout;
+      align?: NodeAlign;
+      width?: number | string | null;
+      offsetX?: number | string | null;
+    };
     const layout = attrs.layout ?? "normal";
     const align = attrs.align ?? "center";
     const width = cssDimension(attrs.width);
+    const offsetX = dimensionToNumber(attrs.offsetX) ?? 0;
     this.dom.classList.remove(
       style("nodeFrameLayout_normal"),
       style("nodeFrameLayout_wide"),
@@ -185,5 +199,7 @@ export class TableInteractionView extends TableView implements NodeView {
       this.dom.style.removeProperty("width");
       this.dom.style.removeProperty("max-width");
     }
+    if (offsetX) this.dom.style.translate = `${Math.round(offsetX)}px 0`;
+    else this.dom.style.removeProperty("translate");
   }
 }

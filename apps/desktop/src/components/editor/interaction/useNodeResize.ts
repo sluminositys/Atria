@@ -2,8 +2,12 @@ import { useCallback, type PointerEvent as ReactPointerEvent, type RefObject } f
 import {
   clamp,
   DEFAULT_SIZE_BOUNDS,
+  dimensionToNumber,
+  horizontalResize,
   supportsHeight,
   supportsWidth,
+  verticalResize,
+  type NodeAlign,
   type ResizeHandle,
   type ResizeMode,
   type SizeBounds,
@@ -15,6 +19,9 @@ interface UseNodeResizeOptions {
   updateAttributes(attrs: Record<string, unknown>): void;
   bounds?: Partial<SizeBounds>;
   lockAspectRatioOnCorner?: boolean;
+  align?: NodeAlign;
+  offsetX?: number | string | null;
+  offsetY?: number | string | null;
 }
 
 export function useNodeResize({
@@ -23,6 +30,9 @@ export function useNodeResize({
   updateAttributes,
   bounds,
   lockAspectRatioOnCorner = false,
+  align = "left",
+  offsetX,
+  offsetY,
 }: UseNodeResizeOptions) {
   return useCallback(
     (handle: ResizeHandle, event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -38,6 +48,8 @@ export function useNodeResize({
       const startY = event.clientY;
       const startWidth = rect.width;
       const startHeight = rect.height;
+      const startOffsetX = dimensionToNumber(offsetX) ?? 0;
+      const startOffsetY = dimensionToNumber(offsetY) ?? 0;
       const aspectRatio = startHeight > 0 ? startWidth / startHeight : 1;
       const limits = { ...DEFAULT_SIZE_BOUNDS, ...bounds };
 
@@ -49,13 +61,30 @@ export function useNodeResize({
         const next: Record<string, unknown> = {};
 
         if (supportsWidth(mode) && (handle.includes("e") || handle.includes("w"))) {
-          const rawWidth = handle.includes("w") ? startWidth - dx : startWidth + dx;
-          next.width = Math.round(clamp(rawWidth, limits.minWidth, limits.maxWidth));
+          const resized = horizontalResize(
+            startWidth,
+            startOffsetX,
+            dx,
+            handle.includes("w") ? "w" : "e",
+            align,
+            limits.minWidth,
+            limits.maxWidth,
+          );
+          next.width = resized.size;
+          next.offsetX = resized.offset;
         }
 
         if (supportsHeight(mode) && (handle.includes("s") || handle.includes("n"))) {
-          const rawHeight = handle.includes("n") ? startHeight - dy : startHeight + dy;
-          next.height = Math.round(clamp(rawHeight, limits.minHeight, limits.maxHeight));
+          const resized = verticalResize(
+            startHeight,
+            startOffsetY,
+            dy,
+            handle.includes("n") ? "n" : "s",
+            limits.minHeight,
+            limits.maxHeight,
+          );
+          next.height = resized.size;
+          next.offsetY = resized.offset;
         }
 
         if (mode === "image" && lockAspectRatioOnCorner && (handle === "se" || handle === "sw") && !moveEvent.shiftKey) {
@@ -82,6 +111,6 @@ export function useNodeResize({
       window.addEventListener("pointerup", onEnd, { once: true });
       window.addEventListener("pointercancel", onEnd, { once: true });
     },
-    [bounds, elementRef, lockAspectRatioOnCorner, mode, updateAttributes],
+    [align, bounds, elementRef, lockAspectRatioOnCorner, mode, offsetX, offsetY, updateAttributes],
   );
 }

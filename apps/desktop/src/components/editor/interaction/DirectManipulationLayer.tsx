@@ -39,7 +39,14 @@ export function DirectManipulationLayer({
 }: DirectManipulationLayerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const layerRef = useRef<HTMLDivElement | null>(null);
-  const attrs = node.attrs as { layout?: NodeLayout; align?: NodeAlign; width?: number | string; height?: number | string };
+  const attrs = node.attrs as {
+    layout?: NodeLayout;
+    align?: NodeAlign;
+    width?: number | string;
+    height?: number | string;
+    offsetX?: number | string;
+    offsetY?: number | string;
+  };
   const layout = attrs.layout ?? "normal";
   const align = attrs.align ?? "left";
   const style = useMemo(() => nodeSizeStyle(attrs, resizeMode), [attrs, resizeMode]);
@@ -49,6 +56,9 @@ export function DirectManipulationLayer({
     updateAttributes,
     bounds: resizeBounds,
     lockAspectRatioOnCorner,
+    align,
+    offsetX: attrs.offsetX,
+    offsetY: attrs.offsetY,
   });
 
   useEffect(() => {
