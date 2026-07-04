@@ -8,7 +8,7 @@ interface ArtifactPreviewProps {
 }
 
 export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
-  const src = artifact.entryUrl || toWorkspaceFileAssetUrl(snapshot, artifact.filePath);
+  const src = toWorkspaceFileAssetUrl(snapshot, artifact.entryUrl || artifact.filePath);
   return (
     <article className={styles.artifactPreview}>
       <iframe

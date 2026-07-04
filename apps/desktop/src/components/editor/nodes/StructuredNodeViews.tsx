@@ -115,7 +115,7 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
   const artifact = props.artifacts.find((item) => item.id === artifactId);
   const collapsed = Boolean(props.node.attrs.collapsed);
   const note = String(props.node.attrs.note ?? "");
-  const src = artifact?.entryUrl || toWorkspaceFileAssetUrl(props.snapshot, artifact?.filePath);
+  const src = toWorkspaceFileAssetUrl(props.snapshot, artifact?.entryUrl || artifact?.filePath);
   const [reloadKey, setReloadKey] = useState(0);
 
   return (

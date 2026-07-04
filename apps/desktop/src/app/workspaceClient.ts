@@ -316,17 +316,19 @@ export function createPageFilePath(snapshot: WorkspaceSnapshot, folderId: string
 
 export function toFileAssetUrl(path: string | undefined): string {
   if (!path) return "";
-  if (/^(https?:|data:|asset:|file:)/.test(path)) return path;
+  if (/^(https?:|data:|asset:)/.test(path)) return path;
+  const nativePath = path.startsWith("file:") ? fileUrlToNativePath(path) : path;
   try {
-    return convertFileSrc(path);
+    return convertFileSrc(nativePath);
   } catch {
-    return path;
+    return nativePath;
   }
 }
 
 export function toWorkspaceFileAssetUrl(snapshot: WorkspaceSnapshot | undefined, path: string | undefined): string {
   if (!path) return "";
-  if (/^(https?:|data:|asset:|file:)/.test(path)) return path;
+  if (/^(https?:|data:|asset:)/.test(path)) return path;
+  if (path.startsWith("file:")) return toFileAssetUrl(path);
   const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(path);
   const isUnixAbsolute = path.startsWith("/");
   const absolutePath = isWindowsAbsolute
@@ -335,6 +337,17 @@ export function toWorkspaceFileAssetUrl(snapshot: WorkspaceSnapshot | undefined,
       ? path
     : joinNative(snapshot?.settings.workspacePath ?? "", path);
   return toFileAssetUrl(absolutePath);
+}
+
+function fileUrlToNativePath(value: string): string {
+  try {
+    const url = new URL(value);
+    const pathname = decodeURIComponent(url.pathname);
+    if (/^\/[a-zA-Z]:\//.test(pathname)) return pathname.slice(1).replace(/\//g, "\\");
+    return pathname;
+  } catch {
+    return value;
+  }
 }
 
 function prepareSeedWorkspace(rootPath: string): WorkspaceSnapshot {
