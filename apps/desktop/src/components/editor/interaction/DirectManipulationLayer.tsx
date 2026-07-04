@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Copy, Maximize2, Minimize2, MoreHorizontal, MoveHorizontal, Trash2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -39,7 +39,14 @@ export function DirectManipulationLayer({
 }: DirectManipulationLayerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const layerRef = useRef<HTMLDivElement | null>(null);
-  const attrs = node.attrs as { layout?: NodeLayout; align?: NodeAlign; width?: number | string; height?: number | string };
+  const attrs = node.attrs as {
+    layout?: NodeLayout;
+    align?: NodeAlign;
+    width?: number | string;
+    height?: number | string;
+    offsetX?: number | string;
+    offsetY?: number | string;
+  };
   const layout = attrs.layout ?? "normal";
   const align = attrs.align ?? "left";
   const style = useMemo(() => nodeSizeStyle(attrs, resizeMode), [attrs, resizeMode]);
@@ -49,7 +56,28 @@ export function DirectManipulationLayer({
     updateAttributes,
     bounds: resizeBounds,
     lockAspectRatioOnCorner,
+    align,
+    offsetX: attrs.offsetX,
+    offsetY: attrs.offsetY,
   });
+
+  useEffect(() => {
+    if (!selected) setMenuOpen(false);
+  }, [selected]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeMenu = () => setMenuOpen(false);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
 
   function duplicateNode() {
     if (typeof getPos !== "function") return;
@@ -60,10 +88,12 @@ export function DirectManipulationLayer({
 
   function setLayout(value: NodeLayout) {
     updateAttributes({ layout: value });
+    setMenuOpen(false);
   }
 
   function setAlign(value: NodeAlign) {
     updateAttributes({ align: value });
+    setMenuOpen(false);
   }
 
   return (
@@ -84,6 +114,7 @@ export function DirectManipulationLayer({
         <button
           className={styles.nodeMoreButton}
           title="Node actions"
+          onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -94,7 +125,12 @@ export function DirectManipulationLayer({
         </button>
       </div>
       {menuOpen && (
-        <div className={styles.nodeMoreMenu} contentEditable={false} onMouseDown={(event) => event.preventDefault()}>
+        <div
+          className={styles.nodeMoreMenu}
+          contentEditable={false}
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.preventDefault()}
+        >
           <label>Layout</label>
           <div>
             {(["normal", "wide", "full"] as NodeLayout[]).map((item) => (
@@ -118,7 +154,13 @@ export function DirectManipulationLayer({
             <Copy size={13} />
             <span>Duplicate</span>
           </button>
-          <button className={styles.nodeTool} onClick={deleteNode}>
+          <button
+            className={styles.nodeTool}
+            onClick={() => {
+              setMenuOpen(false);
+              deleteNode();
+            }}
+          >
             <Trash2 size={13} />
             <span>Delete</span>
           </button>

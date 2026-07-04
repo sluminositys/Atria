@@ -2074,8 +2074,8 @@
   transition: opacity 120ms ease;
 }
 
-.nodeInteractionLayer:hover .nodeChrome,
-.nodeInteractionSelected .nodeChrome {
+.nodeInteractionLayer:hover:not(:has(.nodeInteractionLayer:hover)) > .nodeChrome,
+.nodeInteractionSelected > .nodeChrome {
   opacity: 1;
   pointer-events: auto;
 }
@@ -2184,8 +2184,8 @@
   pointer-events: none;
 }
 
-.nodeInteractionLayer:hover .nodeResizeHandle,
-.nodeInteractionSelected .nodeResizeHandle {
+.nodeInteractionLayer:hover:not(:has(.nodeInteractionLayer:hover)) > .nodeResizeHandles .nodeResizeHandle,
+.nodeInteractionSelected > .nodeResizeHandles .nodeResizeHandle {
   opacity: 1;
   pointer-events: auto;
 }
