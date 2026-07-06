@@ -31,6 +31,7 @@ import { ArtifactPicker } from "./ArtifactPicker";
 import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
 import { EditorToolbar } from "./EditorToolbar";
 import { ImageInsertDialog } from "./ImageInsertDialog";
+import { TableInsertDialog } from "./TableInsertDialog";
 import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
 import {
   SlashCommandMenu,
@@ -105,10 +106,26 @@ const FontSize = Extension.create({
   },
 });
 
+const tableCellStyleAttributes = {
+  textAlign: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-text-align"),
+    renderHTML: (attributes: Record<string, unknown>) =>
+      attributes.textAlign ? { "data-text-align": attributes.textAlign } : {},
+  },
+  cellTone: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-cell-tone"),
+    renderHTML: (attributes: Record<string, unknown>) =>
+      attributes.cellTone ? { "data-cell-tone": attributes.cellTone } : {},
+  },
+};
+
 export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
   const editorRef = useRef<Editor | null>(null);
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [tableDialogOpen, setTableDialogOpen] = useState(false);
   const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
@@ -426,16 +443,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         setImageDialogOpen(true);
         return;
       case "table":
-        insertBlockAtSelection(current, {
-          type: "table",
-          content: Array.from({ length: 3 }, (_, rowIndex) => ({
-            type: "tableRow",
-            content: Array.from({ length: 3 }, () => ({
-              type: rowIndex === 0 ? "tableHeader" : "tableCell",
-              content: [{ type: "paragraph" }],
-            })),
-          })),
-        });
+        setTableDialogOpen(true);
         return;
       case "mermaid":
         insertBlockAtSelection(current, {
@@ -504,6 +512,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         onClose={() => setContextMenu(null)}
         onInsertArtifact={() => setArtifactPickerOpen(true)}
         onInsertImage={() => setImageDialogOpen(true)}
+        onInsertTable={() => setTableDialogOpen(true)}
       />
       <SlashCommandMenu state={slash} onSelect={executeSlashCommand} />
       <ArtifactPicker
@@ -522,6 +531,24 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
         }}
         onInsertUrl={insertImage}
         onInsertFile={insertImageFile}
+      />
+      <TableInsertDialog
+        open={tableDialogOpen}
+        onClose={() => setTableDialogOpen(false)}
+        onInsert={(rows, columns, headerRow) => {
+          const current = editorRef.current;
+          if (!current) return;
+          insertBlockAtSelection(current, {
+            type: "table",
+            content: Array.from({ length: rows }, (_, rowIndex) => ({
+              type: "tableRow",
+              content: Array.from({ length: columns }, () => ({
+                type: headerRow && rowIndex === 0 ? "tableHeader" : "tableCell",
+                content: [{ type: "paragraph" }],
+              })),
+            })),
+          });
+        }}
       />
     </div>
   );
@@ -581,8 +608,16 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       View: TableInteractionView,
     }),
     TableRow,
-    TableHeader,
-    TableCell,
+    TableHeader.extend({
+      addAttributes() {
+        return { ...(this.parent?.() ?? {}), ...tableCellStyleAttributes };
+      },
+    }),
+    TableCell.extend({
+      addAttributes() {
+        return { ...(this.parent?.() ?? {}), ...tableCellStyleAttributes };
+      },
+    }),
     CodeBlockLowlight.extend({
       draggable: true,
       addAttributes() {

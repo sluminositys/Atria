@@ -1855,6 +1855,32 @@
   cursor: default;
 }
 
+.tableToneButton {
+  width: 19px;
+  min-width: 19px;
+  height: 19px;
+  margin: 0 2px;
+  padding: 0;
+  border: 1px solid #cfd2d6;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+.tableToneButton[aria-pressed="true"] {
+  outline: 2px solid var(--atria-accent);
+  outline-offset: 1px;
+}
+
+.tableTone_none {
+  background: linear-gradient(135deg, #fff 46%, #c44 47%, #c44 53%, #fff 54%);
+}
+
+.tableTone_gray { background: #ececea; }
+.tableTone_red { background: #fbe4e4; }
+.tableTone_yellow { background: #fff2c2; }
+.tableTone_green { background: #def2e6; }
+.tableTone_blue { background: #deebfa; }
+
 .documentEditorSurface {
   min-height: 520px;
   color: #37352f;
@@ -1994,6 +2020,15 @@
   padding: 8px 10px;
   vertical-align: top;
 }
+
+.documentTable :is(th, td)[data-text-align="left"] { text-align: left; }
+.documentTable :is(th, td)[data-text-align="center"] { text-align: center; }
+.documentTable :is(th, td)[data-text-align="right"] { text-align: right; }
+.documentTable :is(th, td)[data-cell-tone="gray"] { background: #ececea; }
+.documentTable :is(th, td)[data-cell-tone="red"] { background: #fbe4e4; }
+.documentTable :is(th, td)[data-cell-tone="yellow"] { background: #fff2c2; }
+.documentTable :is(th, td)[data-cell-tone="green"] { background: #def2e6; }
+.documentTable :is(th, td)[data-cell-tone="blue"] { background: #deebfa; }
 
 .documentTable th {
   background: #f7f7f5;
@@ -2969,6 +3004,90 @@
   border-radius: 10px;
   background: rgb(255 255 255 / 98%);
   box-shadow: 0 18px 44px rgb(15 23 42 / 14%);
+}
+
+.tableInsertDialog {
+  width: 286px;
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+  border: 1px solid var(--atria-line);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 98%);
+  box-shadow: 0 18px 44px rgb(15 23 42 / 14%);
+}
+
+.tableInsertDialog header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.tableInsertDialog header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.tableInsertDialog header strong {
+  font-size: 15px;
+}
+
+.tableInsertDialog header span {
+  color: var(--atria-muted);
+  font-size: 12px;
+}
+
+.tableInsertDialog header button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.tableInsertDialog header button:hover {
+  background: var(--atria-hover);
+}
+
+.tableSizeGrid {
+  display: grid;
+  grid-template-columns: repeat(10, 20px);
+  gap: 4px;
+  justify-content: center;
+}
+
+.tableSizeCell,
+.tableSizeCellActive {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #d7d9dc;
+  border-radius: 2px;
+  background: white;
+}
+
+.tableSizeCellActive {
+  border-color: #6b9ddd;
+  background: #e9f2ff;
+}
+
+.tableHeaderOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--atria-text);
+  font-size: 12px;
+}
+
+.tableHeaderOption input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
 }
 
 .selectionBubble {
