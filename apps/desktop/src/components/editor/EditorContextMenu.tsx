@@ -13,9 +13,10 @@ interface EditorContextMenuProps {
   onClose(): void;
   onInsertArtifact(): void;
   onInsertImage(): void;
+  onInsertTable(): void;
 }
 
-export function EditorContextMenu({ editor, state, onClose, onInsertArtifact, onInsertImage }: EditorContextMenuProps) {
+export function EditorContextMenu({ editor, state, onClose, onInsertArtifact, onInsertImage, onInsertTable }: EditorContextMenuProps) {
   if (!state) return null;
 
   function run(command: () => void) {
@@ -54,7 +55,7 @@ export function EditorContextMenu({ editor, state, onClose, onInsertArtifact, on
         <button onClick={() => run(onInsertArtifact)}>
           <FileCode2 size={13} /> Artifact
         </button>
-        <button onClick={() => run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}>
+        <button onClick={() => run(onInsertTable)}>
           Table
         </button>
         <button onClick={() => run(() => insertCode(editor))}>Code</button>
