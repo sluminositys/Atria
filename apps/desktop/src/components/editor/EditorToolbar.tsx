@@ -5,6 +5,9 @@ import {
   BetweenHorizontalStart,
   BetweenVerticalEnd,
   BetweenVerticalStart,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Bold,
   CheckSquare,
   Code2,
@@ -145,6 +148,9 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
           <ToolbarButton label="Toggle header row" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleHeaderRow().run())}>
             <Table2 size={15} />
           </ToolbarButton>
+          <ToolbarButton label="Toggle header column" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleHeaderColumn().run())}>
+            <BetweenVerticalStart size={15} />
+          </ToolbarButton>
           <ToolbarButton
             label="Merge cells"
             disabled={!editor.can().mergeCells()}
@@ -168,6 +174,50 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
           <ToolbarButton label="Delete table" onMouseDown={(event) => run(event, () => editor.chain().focus().deleteTable().run())}>
             <Trash2 size={15} />
           </ToolbarButton>
+        </ToolbarGroup>
+      )}
+
+      {editor.isActive("table") && (
+        <ToolbarGroup>
+          <ToolbarButton
+            label="Align cell text left"
+            active={currentCellAttribute(editor, "textAlign") === "left"}
+            onMouseDown={(event) => run(event, () => editor.chain().focus().setCellAttribute("textAlign", "left").run())}
+          >
+            <AlignLeft size={15} />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Align cell text center"
+            active={currentCellAttribute(editor, "textAlign") === "center"}
+            onMouseDown={(event) => run(event, () => editor.chain().focus().setCellAttribute("textAlign", "center").run())}
+          >
+            <AlignCenter size={15} />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Align cell text right"
+            active={currentCellAttribute(editor, "textAlign") === "right"}
+            onMouseDown={(event) => run(event, () => editor.chain().focus().setCellAttribute("textAlign", "right").run())}
+          >
+            <AlignRight size={15} />
+          </ToolbarButton>
+          {[
+            ["none", null, "Clear cell background"],
+            ["gray", "gray", "Gray cell background"],
+            ["red", "red", "Red cell background"],
+            ["yellow", "yellow", "Yellow cell background"],
+            ["green", "green", "Green cell background"],
+            ["blue", "blue", "Blue cell background"],
+          ].map(([tone, value, label]) => (
+            <button
+              key={tone}
+              type="button"
+              className={`${styles.tableToneButton} ${styles[`tableTone_${tone}`] ?? ""}`}
+              title={label ?? "Cell background"}
+              aria-label={label ?? "Cell background"}
+              aria-pressed={currentCellAttribute(editor, "cellTone") === value}
+              onMouseDown={(event) => run(event, () => editor.chain().focus().setCellAttribute("cellTone", value).run())}
+            />
+          ))}
         </ToolbarGroup>
       )}
     </div>
@@ -226,4 +276,8 @@ function setLink(editor: Editor) {
   if (url === null) return;
   if (!url.trim()) editor.chain().focus().extendMarkRange("link").unsetLink().run();
   else editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+}
+
+function currentCellAttribute(editor: Editor, attribute: "textAlign" | "cellTone") {
+  return editor.getAttributes(editor.isActive("tableHeader") ? "tableHeader" : "tableCell")[attribute] ?? null;
 }

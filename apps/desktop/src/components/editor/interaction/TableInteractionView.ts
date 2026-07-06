@@ -71,21 +71,7 @@ export class TableInteractionView extends TableView implements NodeView {
     drag.appendChild(glyph);
     drag.addEventListener("mousedown", () => this.selectTableNode());
 
-    const more = document.createElement("button");
-    more.className = style("nodeMoreButton");
-    more.type = "button";
-    more.title = "Table actions";
-    const moreGlyph = document.createElement("span");
-    moreGlyph.className = style("tableMoreGlyph");
-    moreGlyph.setAttribute("aria-hidden", "true");
-    more.appendChild(moreGlyph);
-    more.addEventListener("mousedown", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.selectTableNode();
-    });
-
-    chrome.append(drag, more);
+    chrome.append(drag);
     return chrome;
   }
 

@@ -106,6 +106,21 @@ const FontSize = Extension.create({
   },
 });
 
+const tableCellStyleAttributes = {
+  textAlign: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-text-align"),
+    renderHTML: (attributes: Record<string, unknown>) =>
+      attributes.textAlign ? { "data-text-align": attributes.textAlign } : {},
+  },
+  cellTone: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute("data-cell-tone"),
+    renderHTML: (attributes: Record<string, unknown>) =>
+      attributes.cellTone ? { "data-cell-tone": attributes.cellTone } : {},
+  },
+};
+
 export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
   const editorRef = useRef<Editor | null>(null);
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
@@ -593,8 +608,16 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       View: TableInteractionView,
     }),
     TableRow,
-    TableHeader,
-    TableCell,
+    TableHeader.extend({
+      addAttributes() {
+        return { ...(this.parent?.() ?? {}), ...tableCellStyleAttributes };
+      },
+    }),
+    TableCell.extend({
+      addAttributes() {
+        return { ...(this.parent?.() ?? {}), ...tableCellStyleAttributes };
+      },
+    }),
     CodeBlockLowlight.extend({
       draggable: true,
       addAttributes() {
