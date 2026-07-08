@@ -5,6 +5,12 @@ import { App } from "./app/App";
 import "./styles/tokens.css";
 import "./styles/global.css";
 
+// Keep Excalidraw fonts inside the desktop bundle instead of falling back to its CDN.
+(window as typeof window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = new URL(
+  "./",
+  document.baseURI,
+).href;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -21,4 +27,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
-
