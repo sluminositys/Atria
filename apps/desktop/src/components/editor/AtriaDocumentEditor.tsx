@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextStyle from "@tiptap/extension-text-style";
+import Underline from "@tiptap/extension-underline";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Table from "@tiptap/extension-table";
@@ -571,6 +573,8 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       linkOnPaste: true,
     }),
     TextStyle,
+    Color.configure({ types: ["textStyle"] }),
+    Underline,
     FontSize,
     Highlight.configure({ multicolor: true }),
     TaskList.configure({ HTMLAttributes: { class: styles.documentTaskList } }),

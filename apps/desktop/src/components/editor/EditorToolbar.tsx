@@ -26,6 +26,7 @@ import {
   TableCellsMerge,
   TableCellsSplit,
   Trash2,
+  Underline as UnderlineIcon,
   Undo2,
 } from "lucide-react";
 import type { AtriaBlockType } from "@atria/schema";
@@ -87,6 +88,9 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
         <ToolbarButton label="Italicize selected text" disabled={!textSelected} active={editor.isActive("italic")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleItalic().run())}>
           <Italic size={15} />
         </ToolbarButton>
+        <ToolbarButton label="Underline selected text" disabled={!textSelected} active={editor.isActive("underline")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleUnderline().run())}>
+          <UnderlineIcon size={15} />
+        </ToolbarButton>
         <ToolbarButton label="Strike selected text" disabled={!textSelected} active={editor.isActive("strike")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleStrike().run())}>
           <Strikethrough size={15} />
         </ToolbarButton>
@@ -114,7 +118,7 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
       </ToolbarGroup>
 
       <ToolbarGroup>
-        <ToolbarButton label="Code block" active={editor.isActive("codeBlock")} onMouseDown={(event) => run(event, () => onInsert("code"))}>
+        <ToolbarButton label="Code block (also available with triple backticks)" active={editor.isActive("codeBlock")} onMouseDown={(event) => run(event, () => onInsert("code"))}>
           <FileCode2 size={15} />
         </ToolbarButton>
         <ToolbarButton label="Table" active={editor.isActive("table")} onMouseDown={(event) => run(event, () => onInsert("table"))}>
