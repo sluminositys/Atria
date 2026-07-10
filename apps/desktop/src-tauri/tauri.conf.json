@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Atria",
-        "width": 1440,
-        "height": 980,
-        "minWidth": 1120,
-        "minHeight": 760
+        "width": 1360,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640
       }
     ],
     "security": {

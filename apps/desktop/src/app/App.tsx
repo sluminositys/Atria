@@ -210,7 +210,10 @@ export function App() {
         <>
           <div className={styles.sideTitle}>
             <strong>{current.title}</strong>
-            <span>{current.pages.length + current.artifacts.length} files</span>
+            <span>
+              {current.pages.length + current.artifacts.length}{" "}
+              {current.pages.length + current.artifacts.length === 1 ? "file" : "files"}
+            </span>
           </div>
           <FileTree snapshot={current} />
         </>
