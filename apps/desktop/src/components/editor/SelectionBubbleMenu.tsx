@@ -15,7 +15,9 @@ import {
   ListOrdered,
   Pilcrow,
   Quote,
+  Strikethrough,
   Type,
+  Underline as UnderlineIcon,
 } from "lucide-react";
 import styles from "../../app/App.module.css";
 
@@ -67,6 +69,12 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
       <button className={editor.isActive("italic") ? styles.menuButtonActive : styles.menuButton} title="Italic" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleItalic().run())}>
         <Italic size={14} />
       </button>
+      <button className={editor.isActive("underline") ? styles.menuButtonActive : styles.menuButton} title="Underline" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleUnderline().run())}>
+        <UnderlineIcon size={14} />
+      </button>
+      <button className={editor.isActive("strike") ? styles.menuButtonActive : styles.menuButton} title="Strikethrough" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleStrike().run())}>
+        <Strikethrough size={14} />
+      </button>
       <button className={editor.isActive("code") ? styles.menuButtonActive : styles.menuButton} title="Inline code for selected text" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
         <Code2 size={14} />
       </button>
@@ -99,6 +107,20 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
             <Highlighter size={14} />
             Highlight
           </button>
+          <div className={styles.textColorRow} aria-label="Text color">
+            {textColors.map((color) => (
+              <button
+                key={color.value ?? "default"}
+                className={styles.textColorSwatch}
+                style={{ color: color.preview }}
+                title={color.label}
+                aria-label={color.label}
+                onClick={() => setTextColor(editor, color.value)}
+              >
+                A
+              </button>
+            ))}
+          </div>
           <span />
           <button onClick={() => editor.chain().focus().toggleBulletList().run()}>
             <List size={14} />
@@ -121,6 +143,14 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
     </BubbleMenu>
   );
 }
+
+const textColors = [
+  { label: "Default text color", value: null, preview: "#37352f" },
+  { label: "Gray text", value: "#6b7280", preview: "#6b7280" },
+  { label: "Red text", value: "#c2413b", preview: "#c2413b" },
+  { label: "Green text", value: "#2f7d4a", preview: "#2f7d4a" },
+  { label: "Blue text", value: "#2f6fbb", preview: "#2f6fbb" },
+];
 
 function currentTextLabel(editor: Editor): string {
   if (editor.isActive("heading", { level: 1 })) return "H1";
@@ -146,4 +176,9 @@ function setTextSize(editor: Editor, fontSize: string) {
 
 function clearTextSize(editor: Editor) {
   editor.chain().focus().setMark("textStyle", { fontSize: null }).removeEmptyTextStyle().run();
+}
+
+function setTextColor(editor: Editor, color: string | null) {
+  if (color) editor.chain().focus().setColor(color).run();
+  else editor.chain().focus().unsetColor().run();
 }

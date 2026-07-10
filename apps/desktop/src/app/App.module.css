@@ -3029,8 +3029,8 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  max-width: min(520px, calc(100vw - 32px));
-  overflow: hidden;
+  max-width: min(620px, calc(100vw - 32px));
+  overflow: visible;
   padding: 5px;
 }
 
@@ -3050,6 +3050,31 @@
 .selectionBubble .menuButtonActive span {
   font-size: 12px;
   font-weight: 650;
+}
+
+.textColorRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+}
+
+.textColorSwatch {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--atria-soft-line);
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.textColorSwatch:hover {
+  border-color: #a9b1bc;
+  background: var(--atria-hover);
 }
 
 .menuButton,
