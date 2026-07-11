@@ -272,7 +272,8 @@
 
 .documentSurface {
   min-height: 0;
-  overflow: auto;
+  overflow-x: clip;
+  overflow-y: auto;
   background: white;
 }
 
@@ -2344,15 +2345,17 @@
   width: 100%;
 }
 
-.nodeFrameLayout_wide {
+.nodeInteractionLayer.nodeFrameLayout_wide {
   width: min(960px, calc(100vw - var(--atria-rail-width) - var(--atria-tree-width) - var(--atria-block-width) - 96px));
   margin-left: 50%;
+  margin-right: 0;
   transform: translateX(-50%);
 }
 
-.nodeFrameLayout_full {
+.nodeInteractionLayer.nodeFrameLayout_full {
   width: min(1120px, calc(100vw - var(--atria-rail-width) - var(--atria-tree-width) - var(--atria-block-width) - 48px));
   margin-left: 50%;
+  margin-right: 0;
   transform: translateX(-50%);
 }
 
