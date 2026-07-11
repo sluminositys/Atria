@@ -1,6 +1,6 @@
 {
   "name": "atria",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "description": "A desktop-first HTML artifact workspace for AI-generated reports, block notes, and MCP-native agent integration.",
