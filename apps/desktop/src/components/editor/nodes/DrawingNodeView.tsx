@@ -15,12 +15,24 @@ const ExcalidrawCanvas = lazy(() => import("./ExcalidrawCanvas"));
 
 export function DrawingNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
+  const drawingRef = useRef<HTMLElement | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (props.selected) return;
-    setEditing(false);
-  }, [props.selected]);
+    if (!editing) return;
+    const finishOnOutsidePointer = (event: PointerEvent) => {
+      if (!drawingRef.current?.contains(event.target as Node)) setEditing(false);
+    };
+    const finishOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEditing(false);
+    };
+    window.addEventListener("pointerdown", finishOnOutsidePointer);
+    window.addEventListener("keydown", finishOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", finishOnOutsidePointer);
+      window.removeEventListener("keydown", finishOnEscape);
+    };
+  }, [editing]);
 
   useEffect(() => () => {
     if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -29,6 +41,14 @@ export function DrawingNodeView(props: NodeViewProps) {
   function selectNode() {
     if (typeof props.getPos !== "function") return;
     props.editor.chain().setNodeSelection(props.getPos()).run();
+  }
+
+  function beginEditing() {
+    selectNode();
+    setEditing(true);
+    requestAnimationFrame(() => {
+      drawingRef.current?.querySelector<HTMLElement>(".excalidraw")?.focus({ preventScroll: true });
+    });
   }
 
   function persistScene(scene: StoredExcalidrawScene) {
@@ -48,17 +68,19 @@ export function DrawingNodeView(props: NodeViewProps) {
         resizeBounds={{ minWidth: 360, minHeight: 300, maxWidth: 1280, maxHeight: 960 }}
       >
         <section
+          ref={drawingRef}
           className={`${styles.drawingNode} ${editing ? styles.drawingNodeEditing : ""}`}
           contentEditable={false}
-          onDoubleClick={() => {
-            selectNode();
-            setEditing(true);
-          }}
+          onDoubleClick={beginEditing}
         >
           <div
             className={styles.drawingCanvasHost}
-            onPointerDown={() => {
-              if (!editing) selectNode();
+            onPointerDown={(event) => {
+              if (editing) {
+                event.stopPropagation();
+                return;
+              }
+              selectNode();
             }}
             onMouseDown={(event) => {
               if (editing) event.stopPropagation();
@@ -75,7 +97,7 @@ export function DrawingNodeView(props: NodeViewProps) {
               />
             </Suspense>
           </div>
-          {props.selected && (
+          {(props.selected || editing) && (
             <button
               type="button"
               className={styles.drawingModeButton}
@@ -84,7 +106,8 @@ export function DrawingNodeView(props: NodeViewProps) {
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
-                setEditing((value) => !value);
+                if (editing) setEditing(false);
+                else beginEditing();
               }}
             >
               {editing ? <Check size={16} /> : <Pencil size={15} />}
