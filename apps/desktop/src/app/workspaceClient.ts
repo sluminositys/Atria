@@ -100,6 +100,18 @@ export async function searchWorkspace(
   return invoke<WorkspaceContentMatch[]>("atria_search_workspace", { rootPath, query, limit });
 }
 
+export async function readWorkspaceTextFile(rootPath: string, relativePath: string): Promise<string> {
+  return invoke<string>("atria_read_text_file", { rootPath, relativePath });
+}
+
+export async function writeWorkspaceTextFile(
+  rootPath: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  await invoke("atria_write_text_file", { rootPath, relativePath, content });
+}
+
 export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapshot> {
   const firstRead = await invoke<WorkspaceReadResult>("atria_read_workspace", { rootPath });
   let snapshot: WorkspaceSnapshot;
