@@ -764,6 +764,205 @@
   border-radius: var(--atria-radius);
 }
 
+.artifactWorkspace {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 54px minmax(0, 1fr);
+  overflow: hidden;
+  background: #f7f7f5;
+}
+
+.artifactContent {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.artifactToolbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--atria-line);
+  background: white;
+}
+
+.artifactIdentity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--atria-muted);
+}
+
+.artifactIdentity span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.artifactIdentity strong,
+.artifactIdentity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifactIdentity strong {
+  color: var(--atria-ink);
+  font-size: 13px;
+}
+
+.artifactIdentity small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.artifactControls,
+.segmentedControl {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.artifactControls { gap: 7px; }
+
+.segmentedControl {
+  height: 32px;
+  padding: 3px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #f4f4f2;
+}
+
+.segmentedControl button {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+  font-size: 12px;
+}
+
+.segmentedControl button.segmentedControlActive {
+  background: white;
+  color: var(--atria-ink);
+  box-shadow: 0 1px 3px rgb(16 24 40 / 10%);
+}
+
+.artifactActionButton,
+.artifactIconButton {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-text);
+  font-size: 12px;
+}
+
+.artifactActionButton { min-width: 74px; padding: 0 10px; }
+.artifactIconButton { width: 32px; padding: 0; }
+
+.artifactActionButton:hover:not(:disabled),
+.artifactIconButton:hover:not(:disabled) { background: var(--atria-hover); }
+
+.artifactActionButton:disabled,
+.artifactIconButton:disabled { opacity: 0.42; cursor: default; }
+
+.artifactError,
+.artifactConflict {
+  min-width: 0;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 16px;
+  border-bottom: 1px solid #efc8c5;
+  background: #fff4f3;
+  color: #8f2d28;
+  font-size: 12px;
+}
+
+.artifactConflict {
+  border-bottom-color: #e8cf93;
+  background: #fff9e8;
+  color: #7a5412;
+}
+
+.artifactError button,
+.artifactConflict button {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid currentColor;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: inherit;
+}
+
+.artifactBody {
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+}
+
+.artifactPreviewFrame,
+.artifactSourceEditor {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  box-shadow: 0 1px 3px rgb(16 24 40 / 5%);
+}
+
+.artifactPreviewFrame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+
+.artifactPreviewFrame[data-loading="true"] iframe { opacity: 0; }
+
+.artifactPreviewSpinner {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(50% - 10px);
+  color: var(--atria-muted);
+  animation: spin 900ms linear infinite;
+}
+
+.artifactSourceEditor > div,
+.artifactSourceEditor :global(.cm-editor) { height: 100%; }
+
+.artifactLoading {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--atria-muted);
+}
+
 .statusBar {
   height: 26px;
   display: flex;
