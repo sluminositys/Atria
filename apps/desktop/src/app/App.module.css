@@ -984,6 +984,28 @@
   white-space: nowrap;
 }
 
+.saveStatus,
+.saveStatusError {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.saveStatusError {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.saveStatus span,
+.saveStatusError span { max-width: none; }
+
 .blockBar {
   min-width: 0;
   overflow-x: hidden;
@@ -1028,15 +1050,52 @@
   padding-bottom: 18px;
 }
 
-.searchPane input {
+.searchInput {
   width: 100%;
   height: 32px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 10px;
-  padding: 0 10px;
+  padding: 0 3px 0 9px;
   border: 1px solid transparent;
   border-radius: var(--atria-radius);
   background: #ececea;
+  color: var(--atria-muted);
+}
+
+.searchInput:focus-within {
+  border-color: #a8c7f5;
+  background: white;
+  box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.1);
+}
+
+.searchInput input {
+  min-width: 0;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--atria-ink);
   outline: none;
+}
+
+.searchInput button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.searchInput button:hover {
+  background: var(--atria-hover);
+  color: var(--atria-ink);
 }
 
 .searchResults,
@@ -1045,14 +1104,28 @@
   gap: 2px;
 }
 
+.searchGroupLabel {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px 3px;
+  color: var(--atria-faint);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
 .searchResults button,
 .searchGroup button {
-  min-height: 42px;
+  width: 100%;
+  min-height: 46px;
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  grid-template-rows: 20px 16px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   column-gap: 8px;
   align-items: center;
+  padding: 5px 8px;
   border: 0;
   border-radius: var(--atria-radius);
   background: transparent;
@@ -1066,7 +1139,15 @@
 
 .searchResults button > svg,
 .searchGroup button > svg {
-  grid-row: 1 / 3;
+  align-self: start;
+  margin-top: 4px;
+}
+
+.searchResults button > span,
+.searchGroup button > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
 
 .searchResults strong,
@@ -1089,6 +1170,25 @@
 .searchGroup small {
   color: var(--atria-faint);
   font-size: 11px;
+}
+
+.searchGroup time {
+  align-self: start;
+  padding-top: 3px;
+  color: var(--atria-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.searchResults p {
+  min-width: 0;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--atria-muted);
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .searchEmpty {

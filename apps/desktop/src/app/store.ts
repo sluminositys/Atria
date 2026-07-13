@@ -17,9 +17,11 @@ import {
   queueWorkspaceSave,
   scheduleDocumentCheckpoint,
 } from "./workspaceClient";
+import { existingRecentFiles } from "./workspaceNavigation";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
 export type TabType = "page" | "artifact" | "timeline";
+export type WorkspaceSaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface WorkspaceTab {
   key: string;
@@ -42,6 +44,8 @@ interface AtriaState {
   activeBlockPageId?: string;
   filter: string;
   selectedFolderId: string;
+  saveStatus: WorkspaceSaveStatus;
+  saveError: string;
   snapshot?: WorkspaceSnapshot;
   tabs: WorkspaceTab[];
   setSnapshot(snapshot: WorkspaceSnapshot): void;
@@ -66,6 +70,7 @@ interface AtriaState {
   updateBlock(pageId: string, blockId: string, patch: Partial<AtriaBlock>): void;
   deleteBlock(pageId: string, blockId: string): void;
   moveBlock(pageId: string, blockId: string, direction: -1 | 1): void;
+  retrySave(): void;
 }
 
 function nodeKey(type: TabType, id: string): string {
@@ -84,11 +89,27 @@ function sourceFor(snapshot: WorkspaceSnapshot, type: TabType, id: string): "hum
   return "human";
 }
 
+let saveSequence = 0;
+
 function persist(snapshot: WorkspaceSnapshot | undefined): void {
   if (!snapshot) return;
-  void queueWorkspaceSave(snapshot).catch((error) => {
-    console.error("Failed to persist Atria workspace", error);
-  });
+  const sequence = ++saveSequence;
+  queueMicrotask(() => useAtriaStore.setState({ saveStatus: "saving", saveError: "" }));
+  void queueWorkspaceSave(snapshot)
+    .then(() => {
+      if (sequence !== saveSequence) return;
+      useAtriaStore.setState({ saveStatus: "saved", saveError: "" });
+      window.setTimeout(() => {
+        if (sequence === saveSequence) useAtriaStore.setState({ saveStatus: "idle" });
+      }, 1400);
+    })
+    .catch((error) => {
+      if (sequence !== saveSequence) return;
+      useAtriaStore.setState({
+        saveStatus: "error",
+        saveError: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
 
 function withUpdatedPage(
@@ -237,16 +258,25 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
   activeBlockPageId: undefined,
   filter: "",
   selectedFolderId: "",
+  saveStatus: "idle",
+  saveError: "",
   tabs: [],
 
-  setSnapshot(snapshot) {
+  setSnapshot(nextSnapshot) {
+    const recentFiles = existingRecentFiles(nextSnapshot);
+    const snapshot = {
+      ...nextSnapshot,
+      settings: { ...nextSnapshot.settings, recentFiles },
+    };
     set((state) => {
       const tabs = state.tabs
         .map((tab) => {
           const exists =
             tab.type === "artifact"
               ? snapshot.artifacts.some((item) => item.id === tab.id)
-              : snapshot.pages.some((item) => item.id === tab.id);
+              : tab.type === "timeline"
+                ? snapshot.timeline.some((item) => item.id === tab.id)
+                : snapshot.pages.some((item) => item.id === tab.id);
           return exists
             ? { ...tab, title: titleFor(snapshot, tab.type, tab.id), source: sourceFor(snapshot, tab.type, tab.id) }
             : null;
@@ -762,6 +792,10 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       persist(snapshot);
       return { snapshot, activeBlockPageId: pageId, activeBlockId: blockId };
     });
+  },
+
+  retrySave() {
+    persist(get().snapshot);
   },
 }));
 

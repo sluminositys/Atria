@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
+  AlertCircle,
   Bot,
+  Check,
   CheckSquare,
   Code2,
   FileCode2,
@@ -12,6 +14,7 @@ import {
   History as HistoryIcon,
   Image,
   Info,
+  LoaderCircle,
   PanelTop,
   PenTool,
   Quote,
@@ -21,10 +24,12 @@ import {
   Table2,
   Tags,
   FolderOpen,
+  X,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
 import { loadWorkspace, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
+import { existingRecentFiles, relativeTimeLabel } from "./workspaceNavigation";
 import { FileTree } from "../components/FileTree";
 import { DocumentGraphPane } from "../components/DocumentGraphPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
@@ -76,11 +81,43 @@ export function App() {
     setActiveTool,
     closeTab,
     openNode,
+    saveStatus,
+    saveError,
+    retrySave,
   } = useAtriaStore();
 
   useEffect(() => {
     if (query.data) setSnapshot(query.data);
   }, [query.data, setSnapshot]);
+
+  useEffect(() => {
+    function handleTabShortcuts(event: KeyboardEvent) {
+      if (!event.ctrlKey || event.altKey || !tabs.length) return;
+      if (event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        if (activeTabKey) closeTab(activeTabKey);
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const index = Math.max(0, tabs.findIndex((tab) => tab.key === activeTabKey));
+        const offset = event.shiftKey ? -1 : 1;
+        const next = tabs[(index + offset + tabs.length) % tabs.length];
+        if (next) openNode(next.type, next.id);
+        return;
+      }
+      const numeric = Number(event.key);
+      if (numeric >= 1 && numeric <= 9) {
+        const next = tabs[Math.min(numeric - 1, tabs.length - 1)];
+        if (next) {
+          event.preventDefault();
+          openNode(next.type, next.id);
+        }
+      }
+    }
+    window.addEventListener("keydown", handleTabShortcuts);
+    return () => window.removeEventListener("keydown", handleTabShortcuts);
+  }, [activeTabKey, closeTab, openNode, tabs]);
 
   const activeTab = getActiveTab({ activeTabKey, tabs });
   const activePage =
@@ -146,12 +183,18 @@ export function App() {
       <main className={styles.mainPane}>
         <div className={styles.tabs}>
           {tabs.map((tab) => (
-            <div key={tab.key} className={tab.key === activeTabKey ? styles.tabActive : styles.tab}>
+            <div
+              key={tab.key}
+              className={tab.key === activeTabKey ? styles.tabActive : styles.tab}
+              onAuxClick={(event) => {
+                if (event.button === 1) closeTab(tab.key);
+              }}
+            >
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
                 <span>{tab.title}</span>
               </button>
               <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
-                x
+                <X size={14} />
               </button>
             </div>
           ))}
@@ -178,6 +221,22 @@ export function App() {
         </section>
 
         <footer className={styles.statusBar}>
+          {saveStatus === "error" ? (
+            <button
+              type="button"
+              className={styles.saveStatusError}
+              title={`${saveError || "Workspace save failed"}. Click to retry.`}
+              onClick={retrySave}
+            >
+              <AlertCircle size={12} />
+              <span>Save failed</span>
+            </button>
+          ) : (
+            <div className={styles.saveStatus} role="status" aria-live="polite">
+              {saveStatus === "saving" ? <LoaderCircle className={styles.spin} size={12} /> : <Check size={12} />}
+              <span>{saveStatus === "saving" ? "Saving" : "Saved"}</span>
+            </div>
+          )}
           <span>{activeTool === "settings" ? "Settings" : activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
           <span>{activePage ? `${countCharacters(activePage)} characters` : activeArtifact?.updatedAt}</span>
           <span>{snapshot?.title}</span>
@@ -265,7 +324,7 @@ function SearchPane() {
   const [settledQuery, setSettledQuery] = useState("");
   const pages = snapshot?.pages ?? [];
   const artifacts = snapshot?.artifacts ?? [];
-  const recent = snapshot?.settings.recentFiles ?? [];
+  const recent = snapshot ? existingRecentFiles(snapshot) : [];
   const query = filter.trim().toLowerCase();
 
   useEffect(() => {
@@ -306,24 +365,51 @@ function SearchPane() {
         <span>{query ? (contentQuery.isFetching ? "Searching" : `${results.length} results`) : `${recent.length} recent`}</span>
       </div>
       <div className={styles.searchPane}>
-        <input value={filter} placeholder="Search" onChange={(event) => setFilter(event.target.value)} />
+        <label className={styles.searchInput}>
+          <Search size={15} />
+          <input
+            value={filter}
+            aria-label="Search workspace"
+            placeholder="Search workspace"
+            onChange={(event) => setFilter(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && results[0]) openNode(results[0].type, results[0].item.id);
+            }}
+          />
+          {filter && (
+            <button type="button" title="Clear search" onClick={() => setFilter("")}>
+              <X size={14} />
+            </button>
+          )}
+        </label>
         {!query && recent.length > 0 && (
           <div className={styles.searchGroup}>
+            <div className={styles.searchGroupLabel}>Recent</div>
             {recent.map((item) => (
               <button key={`${item.type}:${item.id}`} onClick={() => openNode(item.type, item.id)}>
                 <FileText size={14} />
-                <strong>{item.title}</strong>
-                <small>{item.type === "artifact" ? "HTML" : item.type}</small>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.type === "artifact" ? "HTML Artifact" : "Document"}</small>
+                </span>
+                <time>{relativeTimeLabel(item.openedAt)}</time>
               </button>
             ))}
           </div>
         )}
         {query && <div className={styles.searchResults}>
+          <div className={styles.searchGroupLabel}>
+            <span>Results</span>
+            {contentQuery.isFetching && <LoaderCircle className={styles.spin} size={13} />}
+          </div>
           {results.map(({ type, item, snippet }) => (
             <button key={`${type}:${item.id}`} title={item.filePath} onClick={() => openNode(type, item.id)}>
               {type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
-              <strong>{item.title}</strong>
-              <small>{snippet}</small>
+              <span>
+                <strong>{item.title}</strong>
+                <small>{item.filePath}</small>
+                <p>{snippet}</p>
+              </span>
             </button>
           ))}
           {!contentQuery.isFetching && results.length === 0 && <div className={styles.searchEmpty}>No matches</div>}
