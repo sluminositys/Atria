@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Color from "@tiptap/extension-color";
@@ -33,6 +33,7 @@ import { ArtifactPicker } from "./ArtifactPicker";
 import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
 import { EditorToolbar } from "./EditorToolbar";
 import { ImageInsertDialog } from "./ImageInsertDialog";
+import { LinkEditorPopover, type LinkEditorState } from "./LinkEditorPopover";
 import { TableInsertDialog } from "./TableInsertDialog";
 import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
 import {
@@ -130,6 +131,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
   const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [linkEditor, setLinkEditor] = useState<LinkEditorState | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
   const slashRef = useRef<SlashState | null>(null);
 
@@ -274,7 +276,34 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     return () => window.removeEventListener("click", closeMenus);
   }, []);
 
+  const closeLinkEditor = useCallback(() => setLinkEditor(null), []);
+
   if (!editor) return null;
+
+  function openLinkEditor() {
+    const current = editorRef.current;
+    if (!current || current.state.selection.empty) return;
+    const { from, to } = current.state.selection;
+    const start = current.view.coordsAtPos(from);
+    const end = current.view.coordsAtPos(to);
+    const width = Math.min(330, window.innerWidth - 24);
+    const estimatedHeight = 126;
+    const centeredLeft = (start.left + end.right - width) / 2;
+    const x = clamp(centeredLeft, 12, window.innerWidth - width - 12);
+    const above = start.top - estimatedHeight - 10;
+    const y = above >= 12
+      ? above
+      : clamp(end.bottom + 10, 12, window.innerHeight - estimatedHeight - 12);
+    setContextMenu(null);
+    setSlashState(null);
+    setLinkEditor({
+      from,
+      to,
+      x,
+      y,
+      href: (current.getAttributes("link").href as string | undefined) ?? "",
+    });
+  }
 
   async function insertImageFile(file: File): Promise<boolean> {
     const currentEditor = editorRef.current;
@@ -499,9 +528,10 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
-      <EditorToolbar editor={editor} onInsert={insertFromPalette} />
-      <SelectionBubbleMenu editor={editor} />
+      <EditorToolbar editor={editor} onInsert={insertFromPalette} onEditLink={openLinkEditor} />
+      <SelectionBubbleMenu editor={editor} onEditLink={openLinkEditor} />
       <EditorContent editor={editor} />
+      <LinkEditorPopover editor={editor} state={linkEditor} onClose={closeLinkEditor} />
       {imageInsertError && (
         <div className={styles.editorToast} contentEditable={false}>
           <span>{imageInsertError}</span>
@@ -568,7 +598,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       placeholder: "Write, paste, or type / to insert...",
     }),
     Link.configure({
-      openOnClick: true,
+      openOnClick: false,
       autolink: true,
       linkOnPaste: true,
     }),
@@ -659,6 +689,10 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     createTimelineNode(),
     createLegacyNode(),
   ];
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 }
 
 const layoutAttributes = {

@@ -23,9 +23,10 @@ import styles from "../../app/App.module.css";
 
 interface SelectionBubbleMenuProps {
   editor: Editor;
+  onEditLink(): void;
 }
 
-export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
+export function SelectionBubbleMenu({ editor, onEditLink }: SelectionBubbleMenuProps) {
   const [styleOpen, setStyleOpen] = useState(false);
 
   function run(event: MouseEvent, command: () => void) {
@@ -78,7 +79,7 @@ export function SelectionBubbleMenu({ editor }: SelectionBubbleMenuProps) {
       <button className={editor.isActive("code") ? styles.menuButtonActive : styles.menuButton} title="Inline code for selected text" onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
         <Code2 size={14} />
       </button>
-      <button className={styles.menuButton} title="Link" onMouseDown={(event) => run(event, () => setLink(editor))}>
+      <button className={editor.isActive("link") ? styles.menuButtonActive : styles.menuButton} title="Link" onMouseDown={(event) => run(event, onEditLink)}>
         <LinkIcon size={14} />
       </button>
       {styleOpen && (
@@ -157,17 +158,6 @@ function currentTextLabel(editor: Editor): string {
   if (editor.isActive("heading", { level: 2 })) return "H2";
   if (editor.isActive("heading", { level: 3 })) return "H3";
   return "Aa";
-}
-
-function setLink(editor: Editor) {
-  const previousUrl = editor.getAttributes("link").href as string | undefined;
-  const url = window.prompt("Link URL", previousUrl ?? "");
-  if (url === null) return;
-  if (!url.trim()) {
-    editor.chain().focus().unsetLink().run();
-    return;
-  }
-  editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
 }
 
 function setTextSize(editor: Editor, fontSize: string) {

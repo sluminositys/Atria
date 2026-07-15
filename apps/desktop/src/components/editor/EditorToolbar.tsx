@@ -37,9 +37,10 @@ import styles from "../../app/App.module.css";
 interface EditorToolbarProps {
   editor: Editor;
   onInsert(type: AtriaBlockType | SlashCommand): void;
+  onEditLink(): void;
 }
 
-export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onInsert, onEditLink }: EditorToolbarProps) {
   const [, refresh] = useReducer((value: number) => value + 1, 0);
   const textSelected = hasTextSelection(editor.state.selection);
 
@@ -97,7 +98,7 @@ export function EditorToolbar({ editor, onInsert }: EditorToolbarProps) {
         <ToolbarButton label="Inline code for selected text" disabled={!textSelected} active={editor.isActive("code")} onMouseDown={(event) => run(event, () => editor.chain().focus().toggleCode().run())}>
           <Code2 size={15} />
         </ToolbarButton>
-        <ToolbarButton label="Link selected text" disabled={!textSelected} active={editor.isActive("link")} onMouseDown={(event) => run(event, () => setLink(editor))}>
+        <ToolbarButton label="Link selected text" disabled={!textSelected} active={editor.isActive("link")} onMouseDown={(event) => run(event, onEditLink)}>
           <LinkIcon size={15} />
         </ToolbarButton>
       </ToolbarGroup>
@@ -272,14 +273,6 @@ function setBlockStyle(editor: Editor, value: string) {
   else if (value === "heading-2") editor.chain().focus().setHeading({ level: 2 }).run();
   else if (value === "heading-3") editor.chain().focus().setHeading({ level: 3 }).run();
   else editor.chain().focus().setParagraph().run();
-}
-
-function setLink(editor: Editor) {
-  const previousUrl = editor.getAttributes("link").href as string | undefined;
-  const url = window.prompt("Link URL", previousUrl ?? "");
-  if (url === null) return;
-  if (!url.trim()) editor.chain().focus().extendMarkRange("link").unsetLink().run();
-  else editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
 }
 
 function currentCellAttribute(editor: Editor, attribute: "textAlign" | "cellTone") {

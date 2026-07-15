@@ -3662,6 +3662,100 @@
   padding: 5px;
 }
 
+.linkEditorPopover {
+  position: fixed;
+  z-index: 120;
+  width: min(330px, calc(100vw - 24px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--atria-line);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 98%);
+  box-shadow: 0 14px 36px rgb(15 23 42 / 16%);
+}
+
+.linkEditorPopover label {
+  display: grid;
+  gap: 5px;
+}
+
+.linkEditorPopover label > span {
+  color: var(--atria-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.linkEditorPopover input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--atria-text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.linkEditorPopover input:focus {
+  border-color: var(--atria-accent);
+  box-shadow: 0 0 0 2px rgb(47 111 187 / 12%);
+}
+
+.linkEditorPopover input[aria-invalid="true"] {
+  border-color: #c2413b;
+}
+
+.linkEditorError {
+  color: #a63832;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.linkEditorActions {
+  display: grid;
+  grid-template-columns: 28px 28px minmax(0, 1fr) 28px auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.linkEditorActions button {
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.linkEditorActions button:hover:not(:disabled) {
+  background: var(--atria-hover);
+  color: var(--atria-text);
+}
+
+.linkEditorActions button:disabled {
+  opacity: 0.35;
+}
+
+.linkEditorActions .linkEditorApply {
+  min-width: 54px;
+  padding: 0 10px;
+  background: var(--atria-accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.linkEditorActions .linkEditorApply:hover:not(:disabled) {
+  background: #285f9f;
+  color: #fff;
+}
+
 .selectionBubble .menuButton,
 .selectionBubble .menuButtonActive {
   width: auto;
