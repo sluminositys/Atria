@@ -29,6 +29,7 @@ interface HtmlSourceEditorProps {
   value: string;
   ariaLabel: string;
   autoFocus?: boolean;
+  language?: "html" | "text";
   readOnly?: boolean;
   onChange(value: string): void;
   onSave?(): void;
@@ -63,6 +64,7 @@ export function HtmlSourceEditor({
   value,
   ariaLabel,
   autoFocus = false,
+  language = "html",
   readOnly = false,
   onChange,
   onSave,
@@ -108,7 +110,7 @@ export function HtmlSourceEditor({
         crosshairCursor(),
         highlightActiveLine(),
         highlightSelectionMatches(),
-        html({ autoCloseTags: true, matchClosingTags: true }),
+        language === "html" ? html({ autoCloseTags: true, matchClosingTags: true }) : [],
         atriaTheme,
         EditorState.readOnly.of(readOnly),
         EditorView.editable.of(!readOnly),
@@ -135,7 +137,7 @@ export function HtmlSourceEditor({
       viewRef.current = null;
       view.destroy();
     };
-  }, [ariaLabel, autoFocus, readOnly]);
+  }, [ariaLabel, autoFocus, language, readOnly]);
 
   useEffect(() => {
     const view = viewRef.current;

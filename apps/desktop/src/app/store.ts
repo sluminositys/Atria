@@ -16,11 +16,14 @@ import {
   moveWorkspacePath,
   queueWorkspaceSave,
   scheduleDocumentCheckpoint,
+  writeWorkspaceTextFile,
 } from "./workspaceClient";
 import { existingRecentFiles } from "./workspaceNavigation";
+import { workspaceAssetFromEntry } from "./workspaceFiles";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
-export type TabType = "page" | "artifact" | "timeline";
+export type TabType = "page" | "artifact" | "asset" | "timeline";
+export type FileNodeType = Exclude<TabType, "timeline">;
 export type WorkspaceSaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface WorkspaceTab {
@@ -61,10 +64,11 @@ interface AtriaState {
   moveFolder(folderId: string, parentFolderId: string | null): Promise<void>;
   deleteFolder(folderId: string): Promise<void>;
   createPage(folderId?: string, title?: string): Promise<void>;
-  renameNode(type: "page" | "artifact", id: string, name: string): Promise<void>;
-  moveNode(type: "page" | "artifact", id: string, folderId: string): Promise<void>;
+  createTextFile(folderId?: string, name?: string): Promise<void>;
+  renameNode(type: FileNodeType, id: string, name: string): Promise<void>;
+  moveNode(type: FileNodeType, id: string, folderId: string | null): Promise<void>;
   updatePage(pageId: string, patch: Partial<Page>): void;
-  deletePage(pageId: string): Promise<void>;
+  deleteNode(type: FileNodeType, id: string): Promise<void>;
   addBlock(type: AtriaBlockType, options?: AddBlockOptions): void;
   addImageFromDataUrl(dataUrl: string, pageId?: string, afterBlockId?: string): Promise<void>;
   updateBlock(pageId: string, blockId: string, patch: Partial<AtriaBlock>): void;
@@ -79,6 +83,7 @@ function nodeKey(type: TabType, id: string): string {
 
 function titleFor(snapshot: WorkspaceSnapshot, type: TabType, id: string): string {
   if (type === "artifact") return snapshot.artifacts.find((item) => item.id === id)?.title ?? id;
+  if (type === "asset") return snapshot.assets.find((item) => item.id === id)?.title ?? id;
   if (type === "timeline") return snapshot.timeline.find((item) => item.id === id)?.title ?? id;
   return snapshot.pages.find((item) => item.id === id)?.title ?? id;
 }
@@ -162,10 +167,31 @@ function insertBlock(blocks: AtriaBlock[], block: AtriaBlock, options: AddBlockO
 
 function uniquePageFilePath(snapshot: WorkspaceSnapshot, folderId: string, title: string): string {
   const base = createPageFilePath(snapshot, folderId, title);
-  const used = new Set(snapshot.pages.map((page) => page.filePath).filter(Boolean));
+  const used = workspaceFilePaths(snapshot);
   if (!used.has(base)) return base;
   const suffix = crypto.randomUUID().slice(0, 6);
   return base.replace(/\.html$/i, `-${suffix}.html`);
+}
+
+function uniqueWorkspaceFilePath(snapshot: WorkspaceSnapshot, requestedPath: string): string {
+  const used = workspaceFilePaths(snapshot);
+  if (!used.has(requestedPath)) return requestedPath;
+  const parent = workspaceParentPath(requestedPath);
+  const fileName = workspaceFileName(requestedPath);
+  const dot = fileName.lastIndexOf(".");
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const extension = dot > 0 ? fileName.slice(dot) : "";
+  let counter = 2;
+  let candidate = joinWorkspacePath(parent, `${stem}-${counter}${extension}`);
+  while (used.has(candidate)) {
+    counter += 1;
+    candidate = joinWorkspacePath(parent, `${stem}-${counter}${extension}`);
+  }
+  return candidate;
+}
+
+function workspaceFilePaths(snapshot: WorkspaceSnapshot): Set<string> {
+  return new Set(snapshot.tree.map((item) => item.filePath).filter((path): path is string => Boolean(path)));
 }
 
 function folderContains(folder: WorkspaceFolder, path: string | undefined): boolean {
@@ -226,6 +252,10 @@ function remapFolderSnapshot(
       ...artifact,
       filePath: replaceWorkspacePath(artifact.filePath, fromPath, toPath),
     })),
+    assets: snapshot.assets.map((asset) => ({
+      ...asset,
+      filePath: replaceWorkspacePath(asset.filePath, fromPath, toPath) ?? asset.filePath,
+    })),
     documents: snapshot.documents.map((document) => ({
       ...document,
       path: replaceWorkspacePath(document.path, fromPath, toPath) ?? document.path,
@@ -238,15 +268,22 @@ function remapFolderSnapshot(
   };
 }
 
-function movedDocumentPaths(
+function movedWorkspacePaths(
   before: WorkspaceSnapshot,
   after: WorkspaceSnapshot,
   folderPath: string,
 ): string[] {
-  const nextById = new Map(after.documents.map((document) => [document.id, document.path]));
-  return before.documents.flatMap((document) =>
-    document.path === folderPath || document.path.startsWith(`${folderPath}/`)
-      ? [document.path, nextById.get(document.id)].filter((path): path is string => Boolean(path))
+  const beforeFiles = [
+    ...before.documents.map((document) => ({ key: `document:${document.id}`, path: document.path })),
+    ...before.assets.map((asset) => ({ key: `asset:${asset.id}`, path: asset.filePath })),
+  ];
+  const nextById = new Map<string, string>([
+    ...after.documents.map((document) => [`document:${document.id}`, document.path] as const),
+    ...after.assets.map((asset) => [`asset:${asset.id}`, asset.filePath] as const),
+  ]);
+  return beforeFiles.flatMap((file) =>
+    file.path === folderPath || file.path.startsWith(`${folderPath}/`)
+      ? [file.path, nextById.get(file.key)].filter((path): path is string => Boolean(path))
       : [],
   );
 }
@@ -274,6 +311,8 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
           const exists =
             tab.type === "artifact"
               ? snapshot.artifacts.some((item) => item.id === tab.id)
+              : tab.type === "asset"
+                ? snapshot.assets.some((item) => item.id === tab.id)
               : tab.type === "timeline"
                 ? snapshot.timeline.some((item) => item.id === tab.id)
                 : snapshot.pages.some((item) => item.id === tab.id);
@@ -286,6 +325,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       if (!tabs.length) {
         const firstPage = snapshot.pages[0];
         const firstArtifact = snapshot.artifacts[0];
+        const firstAsset = snapshot.assets[0];
         const first = firstPage
           ? {
               key: nodeKey("page", firstPage.id),
@@ -302,7 +342,15 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
                 title: firstArtifact.title,
                 source: "ai" as const,
               }
-            : undefined;
+            : firstAsset
+              ? {
+                  key: nodeKey("asset", firstAsset.id),
+                  type: "asset" as const,
+                  id: firstAsset.id,
+                  title: firstAsset.title,
+                  source: "human" as const,
+                }
+              : undefined;
         if (first) tabs.push(first);
       }
 
@@ -455,7 +503,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
-      movedDocumentPaths(snapshot, next, folder.path),
+      movedWorkspacePaths(snapshot, next, folder.path),
       `Rename folder ${folder.name} to ${cleanName}`,
       { actorName: "Local user", transactionId: crypto.randomUUID() },
     );
@@ -476,7 +524,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
-      movedDocumentPaths(snapshot, next, folder.path),
+      movedWorkspacePaths(snapshot, next, folder.path),
       `Move folder ${folder.name}`,
       { actorName: "Local user", transactionId: crypto.randomUUID() },
     );
@@ -486,19 +534,32 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const snapshot = get().snapshot;
     const folder = snapshot?.folders.find((item) => item.id === folderId);
     if (!snapshot || !folder?.path) return;
+    const deletedPaths = [
+      ...snapshot.documents.filter((document) => folderContains(folder, document.path)).map((document) => document.path),
+      ...snapshot.assets.filter((asset) => folderContains(folder, asset.filePath)).map((asset) => asset.filePath),
+    ];
     await deleteWorkspacePath(snapshot, folder.path);
     const next = {
       ...snapshot,
       folders: snapshot.folders.filter((item) => !folderContains(folder, item.path)),
       pages: snapshot.pages.filter((page) => !folderContains(folder, page.filePath)),
       artifacts: snapshot.artifacts.filter((artifact) => !folderContains(folder, artifact.filePath)),
+      assets: snapshot.assets.filter((asset) => !folderContains(folder, asset.filePath)),
       documents: snapshot.documents.filter((document) => !folderContains(folder, document.path)),
       tree: snapshot.tree.filter((item) => !folderContains(folder, item.filePath)),
+      settings: {
+        ...snapshot.settings,
+        recentFiles: snapshot.settings.recentFiles.filter((recent) => {
+          const treeItem = snapshot.tree.find((item) => item.type === recent.type && item.id === recent.id);
+          return !folderContains(folder, treeItem?.filePath);
+        }),
+      },
       updatedAt: nowIso(),
     };
     const tabs = get().tabs.filter((tab) => {
       if (tab.type === "page") return next.pages.some((page) => page.id === tab.id);
       if (tab.type === "artifact") return next.artifacts.some((artifact) => artifact.id === tab.id);
+      if (tab.type === "asset") return next.assets.some((asset) => asset.id === tab.id);
       return true;
     });
     set({
@@ -510,6 +571,13 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       selectedFolderId: next.folders[0]?.id ?? "",
     });
     persist(next);
+    await queueWorkspaceSave(next);
+    if (deletedPaths.length) {
+      await checkpointWorkspacePaths(next.settings.workspacePath, deletedPaths, `Delete folder ${folder.name}`, {
+        actorName: "Local user",
+        transactionId: crypto.randomUUID(),
+      });
+    }
   },
 
   async createPage(folderId = get().selectedFolderId || get().snapshot?.folders[0]?.id || "", title = "Untitled") {
@@ -557,25 +625,67 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     };
     set({ snapshot: next, selectedFolderId: folderId, activeBlockPageId: undefined, activeBlockId: undefined });
     persist(next);
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(next.settings.workspacePath, [filePath], `Create ${page.title}`, {
+      actorName: "Local user",
+      transactionId: crypto.randomUUID(),
+    });
     get().openNode("page", page.id);
+  },
+
+  async createTextFile(folderId = get().selectedFolderId || "", name = "Untitled.md") {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const folder = snapshot.folders.find((item) => item.id === folderId);
+    const requestedName = cleanWorkspaceName(name, "Untitled.md");
+    const fileName = requestedName.includes(".") ? requestedName : `${requestedName}.md`;
+    const filePath = uniqueWorkspaceFilePath(snapshot, joinWorkspacePath(folder?.path, fileName));
+    await writeWorkspaceTextFile(snapshot.settings.workspacePath, filePath, "");
+    const asset = workspaceAssetFromEntry({
+      name: workspaceFileName(filePath),
+      relative_path: filePath,
+      absolute_path: "",
+      kind: "file",
+      size: 0,
+      modified_ms: Date.now(),
+    });
+    const next: WorkspaceSnapshot = {
+      ...snapshot,
+      assets: [...snapshot.assets, asset],
+      tree: [
+        ...snapshot.tree,
+        { id: asset.id, type: "asset", parentId: folder?.id ?? null, filePath, order: Date.now() },
+      ],
+      updatedAt: nowIso(),
+    };
+    set({ snapshot: next, selectedFolderId: folder?.id ?? "" });
+    persist(next);
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(next.settings.workspacePath, [filePath], `Create ${asset.title}`, {
+      actorName: "Local user",
+      transactionId: crypto.randomUUID(),
+    });
+    get().openNode("asset", asset.id);
   },
 
   async renameNode(type, id, name) {
     const snapshot = get().snapshot;
     const item = type === "page"
       ? snapshot?.pages.find((page) => page.id === id)
-      : snapshot?.artifacts.find((artifact) => artifact.id === id);
+      : type === "artifact"
+        ? snapshot?.artifacts.find((artifact) => artifact.id === id)
+        : snapshot?.assets.find((asset) => asset.id === id);
     if (!snapshot || !item?.filePath) return;
     const currentName = workspaceFileName(item.filePath);
-    const extension = currentName.includes(".") ? currentName.slice(currentName.lastIndexOf(".")) : ".html";
+    const extension = currentName.includes(".") ? currentName.slice(currentName.lastIndexOf(".")) : "";
     const requestedName = cleanWorkspaceName(name, currentName);
-    const nextFileName = requestedName.toLowerCase().endsWith(extension.toLowerCase())
+    const nextFileName = type === "asset" || !extension || requestedName.toLowerCase().endsWith(extension.toLowerCase())
       ? requestedName
       : `${requestedName}${extension}`;
     const destination = joinWorkspacePath(workspaceParentPath(item.filePath), nextFileName);
     await queueWorkspaceSave(snapshot);
     if (destination !== item.filePath) await moveWorkspacePath(snapshot, item.filePath, destination);
-    const nextTitle = type === "page" ? nextFileName.slice(0, -extension.length) : nextFileName;
+    const nextTitle = type === "page" && extension ? nextFileName.slice(0, -extension.length) : nextFileName;
     const next: WorkspaceSnapshot = {
       ...snapshot,
       pages: snapshot.pages.map((page) =>
@@ -585,6 +695,21 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         type === "artifact" && artifact.id === id
           ? { ...artifact, title: nextTitle, filePath: destination, updatedAt: nowIso() }
           : artifact,
+      ),
+      assets: snapshot.assets.map((asset) =>
+        type === "asset" && asset.id === id
+          ? workspaceAssetFromEntry(
+              {
+                name: nextFileName,
+                relative_path: destination,
+                absolute_path: "",
+                kind: "file",
+                size: asset.size,
+                modified_ms: Date.now(),
+              },
+              asset,
+            )
+          : asset,
       ),
       documents: snapshot.documents.map((document) =>
         document.id === id ? { ...document, title: nextTitle, path: destination, updatedAt: nowIso() } : document,
@@ -609,12 +734,14 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
 
   async moveNode(type, id, folderId) {
     const snapshot = get().snapshot;
-    const folder = snapshot?.folders.find((item) => item.id === folderId);
+    const folder = folderId ? snapshot?.folders.find((item) => item.id === folderId) : undefined;
     const item = type === "page"
       ? snapshot?.pages.find((page) => page.id === id)
-      : snapshot?.artifacts.find((artifact) => artifact.id === id);
-    if (!snapshot || !folder?.path || !item?.filePath) return;
-    const destination = joinWorkspacePath(folder.path, workspaceFileName(item.filePath));
+      : type === "artifact"
+        ? snapshot?.artifacts.find((artifact) => artifact.id === id)
+        : snapshot?.assets.find((asset) => asset.id === id);
+    if (!snapshot || (folderId && !folder?.path) || !item?.filePath) return;
+    const destination = joinWorkspacePath(folder?.path, workspaceFileName(item.filePath));
     if (destination === item.filePath) return;
     await queueWorkspaceSave(snapshot);
     await moveWorkspacePath(snapshot, item.filePath, destination);
@@ -628,17 +755,22 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
           ? { ...artifact, filePath: destination, updatedAt: nowIso() }
           : artifact,
       ),
+      assets: snapshot.assets.map((asset) =>
+        type === "asset" && asset.id === id
+          ? { ...asset, filePath: destination, updatedAt: nowIso() }
+          : asset,
+      ),
       documents: snapshot.documents.map((document) =>
         document.id === id ? { ...document, path: destination, updatedAt: nowIso() } : document,
       ),
       tree: snapshot.tree.map((treeItem) =>
         treeItem.type === type && treeItem.id === id
-          ? { ...treeItem, parentId: folderId, filePath: destination }
+          ? { ...treeItem, parentId: folder?.id ?? null, filePath: destination }
           : treeItem,
       ),
       updatedAt: nowIso(),
     };
-    set({ snapshot: next, selectedFolderId: folderId });
+    set({ snapshot: next, selectedFolderId: folder?.id ?? "" });
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
@@ -676,24 +808,35 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     });
   },
 
-  async deletePage(pageId) {
+  async deleteNode(type, id) {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    const page = snapshot.pages.find((item) => item.id === pageId);
-    if (page?.filePath) await deleteWorkspacePath(snapshot, page.filePath);
+    const item = type === "page"
+      ? snapshot.pages.find((page) => page.id === id)
+      : type === "artifact"
+        ? snapshot.artifacts.find((artifact) => artifact.id === id)
+        : snapshot.assets.find((asset) => asset.id === id);
+    if (!item?.filePath) return;
+    await deleteWorkspacePath(snapshot, item.filePath);
     const next = {
       ...snapshot,
-      pages: snapshot.pages.filter((item) => item.id !== pageId),
-      documents: snapshot.documents.filter((item) => item.id !== pageId),
-      tree: snapshot.tree.filter((item) => !(item.type === "page" && item.id === pageId)),
+      pages: snapshot.pages.filter((page) => !(type === "page" && page.id === id)),
+      artifacts: snapshot.artifacts.filter((artifact) => !(type === "artifact" && artifact.id === id)),
+      assets: snapshot.assets.filter((asset) => !(type === "asset" && asset.id === id)),
+      documents: snapshot.documents.filter((document) => document.id !== id),
+      tree: snapshot.tree.filter((treeItem) => !(treeItem.type === type && treeItem.id === id)),
+      settings: {
+        ...snapshot.settings,
+        recentFiles: snapshot.settings.recentFiles.filter((recent) => !(recent.type === type && recent.id === id)),
+      },
       timeline: snapshot.timeline.map((item) => ({
         ...item,
-        pageIds: item.pageIds.filter((id) => id !== pageId),
-        pageId: item.pageId === pageId ? undefined : item.pageId,
+        pageIds: type === "page" ? item.pageIds.filter((pageId) => pageId !== id) : item.pageIds,
+        pageId: type === "page" && item.pageId === id ? undefined : item.pageId,
       })),
       updatedAt: nowIso(),
     };
-    const tabs = get().tabs.filter((tab) => !(tab.type === "page" && tab.id === pageId));
+    const tabs = get().tabs.filter((tab) => !(tab.type === type && tab.id === id));
     set({
       snapshot: next,
       tabs,
@@ -704,6 +847,11 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       activeBlockPageId: undefined,
     });
     persist(next);
+    await queueWorkspaceSave(next);
+    await checkpointWorkspacePaths(next.settings.workspacePath, [item.filePath], `Delete ${item.title}`, {
+      actorName: "Local user",
+      transactionId: crypto.randomUUID(),
+    });
   },
 
   addBlock(type, options = {}) {

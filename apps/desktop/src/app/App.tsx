@@ -38,6 +38,7 @@ import styles from "./App.module.css";
 
 const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
 const ArtifactPreview = lazy(() => import("../components/ArtifactPreview").then((module) => ({ default: module.ArtifactPreview })));
+const AssetPreview = lazy(() => import("../components/AssetPreview").then((module) => ({ default: module.AssetPreview })));
 const DocumentHistoryView = lazy(() => import("../components/DocumentHistoryView").then((module) => ({ default: module.DocumentHistoryView })));
 
 const railItems: Array<{ tool: ActiveTool; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -126,6 +127,8 @@ export function App() {
     activeTab?.type === "artifact"
       ? snapshot?.artifacts.find((artifact) => artifact.id === activeTab.id)
       : undefined;
+  const activeAsset =
+    activeTab?.type === "asset" ? snapshot?.assets.find((asset) => asset.id === activeTab.id) : undefined;
   const historyTarget: HistoryTarget | undefined = activePage?.filePath
     ? {
         id: activePage.id,
@@ -214,6 +217,8 @@ export function App() {
               <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
             ) : activeArtifact ? (
               <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
+            ) : activeAsset && snapshot ? (
+              <AssetPreview asset={activeAsset} snapshot={snapshot} />
             ) : (
               <div className={styles.emptyState}>No file selected</div>
             )}
@@ -237,8 +242,8 @@ export function App() {
               <span>{saveStatus === "saving" ? "Saving" : "Saved"}</span>
             </div>
           )}
-          <span>{activeTool === "settings" ? "Settings" : activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
-          <span>{activePage ? `${countCharacters(activePage)} characters` : activeArtifact?.updatedAt}</span>
+          <span>{activeTool === "settings" ? "Settings" : activeTool === "history" ? "History" : activeTab?.type === "artifact" ? "HTML" : activeTab?.type === "asset" && activeAsset ? assetKindLabel(activeAsset.kind) : activeTab?.type === "timeline" ? "Timeline" : "Document"}</span>
+          <span>{activePage ? `${countCharacters(activePage)} characters` : formatTimestamp(activeArtifact?.updatedAt ?? activeAsset?.updatedAt)}</span>
           <span>{snapshot?.title}</span>
         </footer>
       </main>
@@ -270,8 +275,8 @@ export function App() {
           <div className={styles.sideTitle}>
             <strong>{current.title}</strong>
             <span>
-              {current.pages.length + current.artifacts.length}{" "}
-              {current.pages.length + current.artifacts.length === 1 ? "file" : "files"}
+              {current.pages.length + current.artifacts.length + current.assets.length}{" "}
+              {current.pages.length + current.artifacts.length + current.assets.length === 1 ? "file" : "files"}
             </span>
           </div>
           <FileTree snapshot={current} />
@@ -324,6 +329,7 @@ function SearchPane() {
   const [settledQuery, setSettledQuery] = useState("");
   const pages = snapshot?.pages ?? [];
   const artifacts = snapshot?.artifacts ?? [];
+  const assets = snapshot?.assets ?? [];
   const recent = snapshot ? existingRecentFiles(snapshot) : [];
   const query = filter.trim().toLowerCase();
 
@@ -340,6 +346,7 @@ function SearchPane() {
   const allItems = [
     ...pages.map((item) => ({ type: "page" as const, item })),
     ...artifacts.map((item) => ({ type: "artifact" as const, item })),
+    ...assets.map((item) => ({ type: "asset" as const, item })),
   ];
   const contentMatches = new Map(
     (contentQuery.data ?? []).map((match) => [normalizeWorkspacePath(match.relativePath), match.snippet]),
@@ -348,7 +355,7 @@ function SearchPane() {
     ? allItems
         .map(({ type, item }) => {
           const filePath = item.filePath ?? "";
-          const metadataMatches = [item.title, item.id, filePath, ...(item.tags ?? [])]
+          const metadataMatches = [item.title, item.id, filePath, ...("tags" in item ? item.tags ?? [] : [])]
             .join(" ")
             .toLowerCase()
             .includes(query);
@@ -385,16 +392,19 @@ function SearchPane() {
         {!query && recent.length > 0 && (
           <div className={styles.searchGroup}>
             <div className={styles.searchGroupLabel}>Recent</div>
-            {recent.map((item) => (
-              <button key={`${item.type}:${item.id}`} onClick={() => openNode(item.type, item.id)}>
-                <FileText size={14} />
-                <span>
-                  <strong>{item.title}</strong>
-                  <small>{item.type === "artifact" ? "HTML Artifact" : "Document"}</small>
-                </span>
-                <time>{relativeTimeLabel(item.openedAt)}</time>
-              </button>
-            ))}
+            {recent.map((item) => {
+              const asset = item.type === "asset" ? assets.find((entry) => entry.id === item.id) : undefined;
+              return (
+                <button key={`${item.type}:${item.id}`} onClick={() => openNode(item.type, item.id)}>
+                  {item.type === "artifact" ? <FileCode2 size={14} /> : asset?.kind === "image" ? <Image size={14} /> : <FileText size={14} />}
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.type === "artifact" ? "HTML Artifact" : asset ? assetKindLabel(asset.kind) : "Document"}</small>
+                  </span>
+                  <time>{relativeTimeLabel(item.openedAt)}</time>
+                </button>
+              );
+            })}
           </div>
         )}
         {query && <div className={styles.searchResults}>
@@ -404,7 +414,7 @@ function SearchPane() {
           </div>
           {results.map(({ type, item, snippet }) => (
             <button key={`${type}:${item.id}`} title={item.filePath} onClick={() => openNode(type, item.id)}>
-              {type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
+              {type === "artifact" ? <FileCode2 size={14} /> : type === "asset" && item.kind === "image" ? <Image size={14} /> : <FileText size={14} />}
               <span>
                 <strong>{item.title}</strong>
                 <small>{item.filePath}</small>
@@ -495,4 +505,22 @@ function extractDocumentText(node: unknown): string {
   const text = typeof record.text === "string" ? record.text : "";
   const children = Array.isArray(record.content) ? record.content.map(extractDocumentText).join("") : "";
   return text + children;
+}
+
+function assetKindLabel(kind: "image" | "pdf" | "text" | "document" | "other"): string {
+  if (kind === "pdf") return "PDF";
+  return `${kind[0]?.toUpperCase() ?? ""}${kind.slice(1)} file`;
+}
+
+function formatTimestamp(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
