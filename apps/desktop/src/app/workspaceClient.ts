@@ -109,6 +109,10 @@ export async function writeWorkspaceTextFile(
   await invoke("atria_write_text_file", { rootPath, relativePath, content });
 }
 
+export async function openWorkspaceFile(rootPath: string, relativePath: string): Promise<void> {
+  await invoke("atria_open_workspace_file", { rootPath, relativePath });
+}
+
 export async function loadWorkspace(rootPath?: string): Promise<WorkspaceSnapshot> {
   const firstRead = await invoke<WorkspaceReadResult>("atria_read_workspace", { rootPath });
   let snapshot: WorkspaceSnapshot;

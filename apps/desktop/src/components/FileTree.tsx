@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, FileCode2, FileText, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, File, FileCode2, FileImage, FileText, Folder } from "lucide-react";
 import { WorkspaceFolder, WorkspaceSnapshot, WorkspaceTreeItem } from "@atria/schema";
 import { useAtriaStore } from "../app/store";
 import styles from "../app/App.module.css";
@@ -23,6 +23,7 @@ const TREE_DRAG_TYPE = "application/x-atria-workspace-node";
 export function FileTree({ snapshot }: FileTreeProps) {
   const {
     selectedFolderId,
+    activeTabKey,
     setSelectedFolder,
     toggleFolder,
     openNode,
@@ -66,6 +67,7 @@ export function FileTree({ snapshot }: FileTreeProps) {
           depth={0}
           snapshot={snapshot}
           selectedFolderId={selectedFolderId}
+          activeTabKey={activeTabKey}
           onSelectFolder={setSelectedFolder}
           onToggleFolder={toggleFolder}
           onOpenNode={openNode}
@@ -77,6 +79,17 @@ export function FileTree({ snapshot }: FileTreeProps) {
             if (dragged.kind === "folder") void moveFolder(dragged.id, targetFolderId);
             else void moveNode(dragged.kind, dragged.id, targetFolderId);
           }}
+        />
+      ))}
+      {treeItemsFor(snapshot, null).map((item) => (
+        <TreeFile
+          key={`${item.type}:${item.id}:root`}
+          item={item}
+          snapshot={snapshot}
+          depth={0}
+          activeTabKey={activeTabKey}
+          onOpenNode={openNode}
+          onMenu={(nextMenu) => setMenu(nextMenu)}
         />
       ))}
       {menu && (
@@ -189,6 +202,7 @@ function FolderNode({
   depth,
   snapshot,
   selectedFolderId,
+  activeTabKey,
   onSelectFolder,
   onToggleFolder,
   onOpenNode,
@@ -201,9 +215,10 @@ function FolderNode({
   depth: number;
   snapshot: WorkspaceSnapshot;
   selectedFolderId: string;
+  activeTabKey: string;
   onSelectFolder(folderId: string): void;
   onToggleFolder(folderId: string): void;
-  onOpenNode(type: "page" | "artifact", id: string): void;
+  onOpenNode(type: "page" | "artifact" | "asset", id: string): void;
   onMenu(menu: TreeMenu): void;
   dragTargetId: string | null;
   onDragTarget(folderId: string | null): void;
@@ -265,6 +280,7 @@ function FolderNode({
               depth={depth + 1}
               snapshot={snapshot}
               selectedFolderId={selectedFolderId}
+              activeTabKey={activeTabKey}
               onSelectFolder={onSelectFolder}
               onToggleFolder={onToggleFolder}
               onOpenNode={onOpenNode}
@@ -280,6 +296,7 @@ function FolderNode({
               item={item}
               snapshot={snapshot}
               depth={depth + 1}
+              activeTabKey={activeTabKey}
               onOpenNode={onOpenNode}
               onMenu={onMenu}
             />
@@ -294,42 +311,47 @@ function TreeFile({
   item,
   snapshot,
   depth,
+  activeTabKey,
   onOpenNode,
   onMenu,
 }: {
   item: WorkspaceTreeItem;
   snapshot: WorkspaceSnapshot;
   depth: number;
-  onOpenNode(type: "page" | "artifact", id: string): void;
+  activeTabKey: string;
+  onOpenNode(type: "page" | "artifact" | "asset", id: string): void;
   onMenu(menu: TreeMenu): void;
 }) {
-  if (item.type !== "page" && item.type !== "artifact") return null;
+  if (item.type !== "page" && item.type !== "artifact" && item.type !== "asset") return null;
   const page = item.type === "page" ? snapshot.pages.find((entry) => entry.id === item.id) : undefined;
   const artifact =
     item.type === "artifact" ? snapshot.artifacts.find((entry) => entry.id === item.id) : undefined;
-  const title = page?.title ?? artifact?.title ?? item.id;
-  const source = (artifact?.source ?? page?.source) === "ai" ? "AI" : "HUMAN";
+  const asset = item.type === "asset" ? snapshot.assets.find((entry) => entry.id === item.id) : undefined;
+  const title = page?.title ?? artifact?.title ?? asset?.title ?? item.id;
   const paddingLeft = 12 + depth * 16;
   const nodeType = item.type;
+  const active = activeTabKey === `${nodeType}:${item.id}`;
+  const Icon = item.type === "artifact" ? FileCode2 : asset?.kind === "image" ? FileImage : asset ? File : FileText;
 
   return (
     <button
-      className={styles.treeFile}
+      className={active ? styles.treeFileActive : styles.treeFile}
       style={{ paddingLeft }}
-      draggable
+      draggable={nodeType !== "asset"}
       onClick={() => onOpenNode(nodeType, item.id)}
-      onDragStart={(event) => writeDragData(event, { kind: nodeType, id: item.id })}
+      onDragStart={(event) => {
+        if (nodeType !== "asset") writeDragData(event, { kind: nodeType, id: item.id });
+      }}
       onContextMenu={(event) => {
+        if (nodeType === "asset") return;
         event.preventDefault();
         event.stopPropagation();
         onMenu({ x: event.clientX, y: event.clientY, kind: "file", nodeType, nodeId: item.id });
       }}
+      title={item.filePath}
     >
-      {item.type === "artifact" ? <FileCode2 size={14} /> : <FileText size={14} />}
-      <span>
-        <strong>{title}</strong>
-        <small>{source}</small>
-      </span>
+      <Icon size={14} />
+      <strong>{title}</strong>
     </button>
   );
 }
@@ -357,7 +379,7 @@ function foldersFor(snapshot: WorkspaceSnapshot, parentId: string | null): Works
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
-function treeItemsFor(snapshot: WorkspaceSnapshot, parentId: string): WorkspaceTreeItem[] {
+function treeItemsFor(snapshot: WorkspaceSnapshot, parentId: string | null): WorkspaceTreeItem[] {
   return snapshot.tree
     .filter((item) => item.parentId === parentId)
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));

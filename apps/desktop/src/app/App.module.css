@@ -84,7 +84,8 @@
 .folderRow,
 .folderRowActive,
 .folderRowDrop,
-.treeFile {
+.treeFile,
+.treeFileActive {
   width: calc(100% - 18px);
   min-height: 32px;
   margin: 1px 9px;
@@ -115,7 +116,8 @@
 .folderRow:hover,
 .folderRowActive,
 .folderRowDrop,
-.treeFile:hover {
+.treeFile:hover,
+.treeFileActive {
   background: var(--atria-active);
 }
 
@@ -128,7 +130,8 @@
   white-space: nowrap;
 }
 
-.treeFile {
+.treeFile,
+.treeFileActive {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 6px;
@@ -137,13 +140,8 @@
   padding-bottom: 4px;
 }
 
-.treeFile span {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-}
-
-.treeFile strong {
+.treeFile strong,
+.treeFileActive strong {
   min-width: 0;
   overflow: hidden;
   color: #20242a;
@@ -153,11 +151,6 @@
   white-space: nowrap;
 }
 
-.treeFile small {
-  color: var(--atria-faint);
-  font-size: 10px;
-  line-height: 1;
-}
 
 .contextMenu {
   position: fixed;
@@ -961,6 +954,102 @@
   display: grid;
   place-items: center;
   color: var(--atria-muted);
+}
+
+.assetPreviewBody {
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+}
+
+.assetImageStage,
+.assetPdfFrame,
+.assetUnsupported {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+}
+
+.assetImageStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+}
+
+.assetImageFit {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.assetImageActual {
+  max-width: none;
+  height: auto;
+  flex: 0 0 auto;
+}
+
+.assetPdfFrame { border: 1px solid var(--atria-line); }
+
+.assetUnsupported {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: var(--atria-muted);
+}
+
+.assetUnsupported strong {
+  max-width: min(480px, 70vw);
+  overflow: hidden;
+  color: var(--atria-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetUnsupported > span {
+  margin-bottom: 8px;
+  color: var(--atria-faint);
+  font-size: 12px;
+}
+
+.assetZoomControls {
+  height: 32px;
+  display: grid;
+  grid-template-columns: 30px 48px 30px 30px;
+  align-items: center;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+}
+
+.assetZoomControls button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.assetZoomControls button:hover,
+.assetZoomControls button.assetZoomActive {
+  background: var(--atria-hover);
+  color: var(--atria-ink);
+}
+
+.assetZoomControls > span {
+  color: var(--atria-muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 .statusBar {

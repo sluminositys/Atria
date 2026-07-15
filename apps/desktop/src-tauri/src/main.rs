@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::sync::LazyLock;
 use std::time::UNIX_EPOCH;
 use tauri::tray::TrayIconBuilder;
@@ -362,6 +363,25 @@ fn atria_write_data_url(root_path: Option<String>, relative_path: String, data_u
   Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn atria_open_workspace_file(root_path: Option<String>, relative_path: String) -> Result<(), String> {
+  let root = resolve_root(root_path)?;
+  let path = safe_join(&root, &relative_path)?;
+  if !path.is_file() {
+    return Err(format!("Workspace file does not exist: {relative_path}"));
+  }
+
+  #[cfg(target_os = "windows")]
+  let mut command = Command::new("explorer.exe");
+  #[cfg(target_os = "macos")]
+  let mut command = Command::new("open");
+  #[cfg(all(unix, not(target_os = "macos")))]
+  let mut command = Command::new("xdg-open");
+
+  command.arg(path).spawn().map_err(|error| error.to_string())?;
+  Ok(())
+}
+
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
@@ -387,6 +407,7 @@ fn main() {
       atria_move_path,
       atria_delete_path,
       atria_write_data_url,
+      atria_open_workspace_file,
       git_history::atria_git_initialize,
       git_history::atria_git_status,
       git_history::atria_git_checkpoint,
@@ -401,7 +422,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-  use super::{atria_move_path, is_searchable_document, search_snippet};
+  use super::{atria_move_path, atria_open_workspace_file, is_searchable_document, search_snippet};
   use std::fs;
 
   #[test]
@@ -432,6 +453,20 @@ mod tests {
 
     assert!(!root.join("note.html").exists());
     assert_eq!(fs::read_to_string(root.join("Notes/renamed.html")).unwrap(), "content");
+    fs::remove_dir_all(root).unwrap();
+  }
+
+  #[test]
+  fn refuses_to_open_a_missing_workspace_file() {
+    let root = std::env::temp_dir().join(format!("atria-open-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let error = atria_open_workspace_file(
+      Some(root.to_string_lossy().into_owned()),
+      "missing.pdf".to_string(),
+    )
+    .unwrap_err();
+
+    assert!(error.contains("does not exist"));
     fs::remove_dir_all(root).unwrap();
   }
 }
