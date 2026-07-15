@@ -20,7 +20,7 @@ import {
 import { existingRecentFiles } from "./workspaceNavigation";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
-export type TabType = "page" | "artifact" | "timeline";
+export type TabType = "page" | "artifact" | "asset" | "timeline";
 export type WorkspaceSaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface WorkspaceTab {
@@ -79,6 +79,7 @@ function nodeKey(type: TabType, id: string): string {
 
 function titleFor(snapshot: WorkspaceSnapshot, type: TabType, id: string): string {
   if (type === "artifact") return snapshot.artifacts.find((item) => item.id === id)?.title ?? id;
+  if (type === "asset") return snapshot.assets.find((item) => item.id === id)?.title ?? id;
   if (type === "timeline") return snapshot.timeline.find((item) => item.id === id)?.title ?? id;
   return snapshot.pages.find((item) => item.id === id)?.title ?? id;
 }
@@ -274,6 +275,8 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
           const exists =
             tab.type === "artifact"
               ? snapshot.artifacts.some((item) => item.id === tab.id)
+              : tab.type === "asset"
+                ? snapshot.assets.some((item) => item.id === tab.id)
               : tab.type === "timeline"
                 ? snapshot.timeline.some((item) => item.id === tab.id)
                 : snapshot.pages.some((item) => item.id === tab.id);
@@ -286,6 +289,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       if (!tabs.length) {
         const firstPage = snapshot.pages[0];
         const firstArtifact = snapshot.artifacts[0];
+        const firstAsset = snapshot.assets[0];
         const first = firstPage
           ? {
               key: nodeKey("page", firstPage.id),
@@ -302,7 +306,15 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
                 title: firstArtifact.title,
                 source: "ai" as const,
               }
-            : undefined;
+            : firstAsset
+              ? {
+                  key: nodeKey("asset", firstAsset.id),
+                  type: "asset" as const,
+                  id: firstAsset.id,
+                  title: firstAsset.title,
+                  source: "human" as const,
+                }
+              : undefined;
         if (first) tabs.push(first);
       }
 

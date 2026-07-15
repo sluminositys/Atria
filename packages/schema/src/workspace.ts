@@ -6,7 +6,20 @@ import { ProjectSchema } from "./project";
 import { AtriaSettingsSchema } from "./settings";
 import { TimelineSummarySchema } from "./timeline";
 
-export const WorkspaceNodeTypeSchema = z.enum(["folder", "page", "artifact", "timeline"]);
+export const WorkspaceNodeTypeSchema = z.enum(["folder", "page", "artifact", "asset", "timeline"]);
+
+export const WorkspaceAssetKindSchema = z.enum(["image", "pdf", "text", "document", "other"]);
+
+export const WorkspaceAssetSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  filePath: z.string(),
+  kind: WorkspaceAssetKindSchema,
+  extension: z.string().default(""),
+  mimeType: z.string().optional(),
+  size: z.number().nonnegative().default(0),
+  updatedAt: z.string().optional(),
+});
 
 export const WorkspaceFolderSchema = z.object({
   id: z.string(),
@@ -32,6 +45,7 @@ export const WorkspaceSnapshotSchema = z.object({
   tree: z.array(WorkspaceTreeItemSchema).default([]),
   pages: z.array(PageSchema).default([]),
   artifacts: z.array(ArtifactSchema).default([]),
+  assets: z.array(WorkspaceAssetSchema).default([]),
   documents: z.array(DocumentRecordSchema).default([]),
   timeline: z.array(TimelineSummarySchema).default([]),
   projects: z.array(ProjectSchema).default([]),
@@ -40,6 +54,8 @@ export const WorkspaceSnapshotSchema = z.object({
 });
 
 export type WorkspaceFolder = z.infer<typeof WorkspaceFolderSchema>;
+export type WorkspaceAsset = z.infer<typeof WorkspaceAssetSchema>;
+export type WorkspaceAssetKind = z.infer<typeof WorkspaceAssetKindSchema>;
 export type WorkspaceTreeItem = z.infer<typeof WorkspaceTreeItemSchema>;
 export type WorkspaceSnapshot = z.infer<typeof WorkspaceSnapshotSchema>;
 export type WorkspaceNodeType = z.infer<typeof WorkspaceNodeTypeSchema>;

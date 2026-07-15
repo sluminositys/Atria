@@ -10,7 +10,7 @@ export const AiSettingsSchema = z.object({
 });
 
 export const RecentFileSchema = z.object({
-  type: z.enum(["page", "artifact", "timeline"]),
+  type: z.enum(["page", "artifact", "asset", "timeline"]),
   id: z.string(),
   title: z.string(),
   source: z.enum(["human", "ai"]),

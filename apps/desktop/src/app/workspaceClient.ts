@@ -8,6 +8,7 @@ import {
   Page,
   PageSchema,
   WorkspaceFolder,
+  WorkspaceAsset,
   WorkspaceSnapshot,
   WorkspaceSnapshotSchema,
   WorkspaceTreeItem,
@@ -18,13 +19,9 @@ import {
   parseSemanticDocument,
   serializeSemanticDocument,
 } from "@atria/core/document-html";
+import { LocalWorkspaceEntry, workspaceAssetFromEntry } from "./workspaceFiles";
 
-interface WorkspaceEntry {
-  name: string;
-  relative_path: string;
-  absolute_path: string;
-  kind: "folder" | "file";
-}
+type WorkspaceEntry = LocalWorkspaceEntry;
 
 interface WorkspaceReadResult {
   root_path: string;
@@ -526,6 +523,19 @@ async function hydrateWorkspace(
     });
   });
 
+  const representedPaths = new Set([
+    ...legacyPageEntries.map((entry) => entry.relative_path),
+    ...htmlEntries.map((entry) => entry.relative_path),
+  ]);
+  const assets = fileEntries
+    .filter((entry) => !representedPaths.has(entry.relative_path))
+    .map((entry): WorkspaceAsset =>
+      workspaceAssetFromEntry(
+        entry,
+        stored.assets.find((asset) => asset.filePath === entry.relative_path),
+      ),
+    );
+
   const tree: WorkspaceTreeItem[] = [
     ...pages.map((page, index) => ({
       id: page.id,
@@ -541,6 +551,13 @@ async function hydrateWorkspace(
       filePath: artifact.filePath,
       order: 10000 + index * 10,
     })),
+    ...assets.map((asset, index) => ({
+      id: asset.id,
+      type: "asset" as const,
+      parentId: parentFolderId(asset.filePath),
+      filePath: asset.filePath,
+      order: 20000 + index * 10,
+    })),
   ];
 
   return withDocumentRecords(WorkspaceSnapshotSchema.parse({
@@ -555,6 +572,7 @@ async function hydrateWorkspace(
     tree,
     pages,
     artifacts,
+    assets,
     updatedAt: nowIso(),
   }));
 }

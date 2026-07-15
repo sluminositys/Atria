@@ -9,6 +9,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
+use std::time::UNIX_EPOCH;
 use tauri::tray::TrayIconBuilder;
 
 mod git_history;
@@ -19,6 +20,8 @@ struct WorkspaceEntry {
   relative_path: String,
   absolute_path: String,
   kind: String,
+  size: u64,
+  modified_ms: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -107,6 +110,12 @@ fn collect_entries(root: &Path, current: &Path, entries: &mut Vec<WorkspaceEntry
       relative_path: relative_slash(root, &path)?,
       absolute_path: path.to_string_lossy().to_string(),
       kind: kind.clone(),
+      size: if metadata.is_file() { metadata.len() } else { 0 },
+      modified_ms: metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64),
     });
 
     if metadata.is_dir() {

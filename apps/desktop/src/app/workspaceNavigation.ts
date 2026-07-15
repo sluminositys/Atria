@@ -4,6 +4,7 @@ export function existingRecentFiles(snapshot: WorkspaceSnapshot, limit = 20): Re
   const validKeys = new Set([
     ...snapshot.pages.map((document) => `page:${document.id}`),
     ...snapshot.artifacts.map((artifact) => `artifact:${artifact.id}`),
+    ...snapshot.assets.map((asset) => `asset:${asset.id}`),
     ...snapshot.timeline.map((summary) => `timeline:${summary.id}`),
   ]);
   const seen = new Set<string>();
