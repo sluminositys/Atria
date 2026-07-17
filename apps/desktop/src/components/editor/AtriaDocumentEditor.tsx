@@ -235,9 +235,13 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
             view.focus();
             return true;
           },
-          contextmenu(_view, event) {
+          contextmenu(view, event) {
             event.preventDefault();
             setSlash(null);
+            const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            if (hit && !(view.state.selection.from <= hit.pos && hit.pos <= view.state.selection.to)) {
+              view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(hit.pos))));
+            }
             setContextMenu({ x: event.clientX, y: event.clientY });
             return true;
           },

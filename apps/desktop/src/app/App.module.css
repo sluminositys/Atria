@@ -3983,6 +3983,10 @@
   padding: 6px;
 }
 
+.editorContextMenu {
+  width: 232px;
+}
+
 .editorContextMenu section {
   display: grid;
   gap: 2px;
@@ -3994,13 +3998,22 @@
   border-bottom: 0;
 }
 
-.editorContextMenu label,
+.editorContextMenuLabel,
 .slashMenu label {
   padding: 4px 8px;
   color: var(--atria-faint);
   font-size: 11px;
   font-weight: 650;
   text-transform: uppercase;
+}
+
+.editorContextMenuIcon {
+  width: 15px;
+  height: 15px;
+  display: inline-grid;
+  flex: 0 0 15px;
+  place-items: center;
+  color: var(--atria-muted);
 }
 
 .slashEmpty {
@@ -4029,6 +4042,20 @@
 .slashItem:hover,
 .slashItemActive {
   background: var(--atria-hover);
+}
+
+.editorContextMenu button:focus-visible {
+  background: var(--atria-hover);
+  outline: 1px solid var(--atria-accent);
+  outline-offset: -1px;
+}
+
+.editorContextMenu button:disabled {
+  opacity: 0.38;
+}
+
+.editorContextMenu .editorContextMenuDanger {
+  color: #a63832;
 }
 
 .dialogBackdrop {
