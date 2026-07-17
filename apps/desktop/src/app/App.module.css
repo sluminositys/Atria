@@ -2406,6 +2406,119 @@
   position: relative;
 }
 
+.documentModeBar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.documentModeBar .segmentedControl {
+  height: 30px;
+}
+
+.documentModeBar .segmentedControl button {
+  min-width: 76px;
+  height: 28px;
+}
+
+.documentSourceActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.documentSourceActions button {
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--atria-line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--atria-muted);
+}
+
+.documentSourceActions button:hover:not(:disabled) {
+  background: var(--atria-hover);
+  color: var(--atria-text);
+}
+
+.documentSourceActions button:disabled {
+  opacity: 0.4;
+}
+
+.documentSourceActions .documentSourceApply {
+  min-width: 76px;
+  background: var(--atria-text);
+  color: #fff;
+  font-weight: 650;
+}
+
+.documentSourceActions .documentSourceApply:hover:not(:disabled) {
+  background: #111827;
+  color: #fff;
+}
+
+.documentVisualSurface {
+  min-width: 0;
+}
+
+.documentToolbarSurface {
+  min-width: 0;
+}
+
+.documentToolbarSurfaceHidden,
+.documentVisualSurfaceHidden,
+.documentSourcePaneHidden {
+  display: none;
+}
+
+.documentSourcePane,
+.documentSourcePaneHidden {
+  position: relative;
+  height: max(480px, calc(100vh - 270px));
+  min-height: 480px;
+  max-height: 820px;
+  overflow: hidden;
+  border: 1px solid var(--atria-line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.documentSourcePane > div:last-child {
+  height: 100%;
+}
+
+.documentSourceError {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  right: 18px;
+  max-width: min(440px, calc(100% - 72px));
+  padding: 8px 10px;
+  border: 1px solid #e8bbb8;
+  border-radius: 4px;
+  background: #fff4f3;
+  color: #a63832;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 6px 18px rgb(15 23 42 / 10%);
+}
+
+.documentSourceLoading {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--atria-muted);
+  font-size: 12px;
+}
+
 .editorToolbar {
   position: sticky;
   z-index: 7;

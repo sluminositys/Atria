@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Color from "@tiptap/extension-color";
@@ -17,6 +17,7 @@ import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@t
 import { Selection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { createLowlight } from "lowlight";
+import { Check, Code2, Eye, RotateCcw, Save } from "lucide-react";
 import bash from "highlight.js/lib/languages/bash";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
@@ -62,7 +63,12 @@ import { StableNodeId } from "./extensions/StableNodeId";
 import { TrailingParagraph } from "./extensions/TrailingParagraph";
 import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
+import { validateDocumentBodySource } from "./documentSource";
 import styles from "../../app/App.module.css";
+
+const HtmlSourceEditor = lazy(() =>
+  import("./HtmlSourceEditor").then((module) => ({ default: module.HtmlSourceEditor })),
+);
 
 interface AtriaDocumentEditorProps {
   value?: AtriaDocumentContent | string;
@@ -74,6 +80,8 @@ interface AtriaDocumentEditorProps {
 interface SlashState extends SlashMenuState {
   range: { from: number; to: number };
 }
+
+type DocumentEditorMode = "visual" | "source";
 
 const lowlight = createLowlight();
 lowlight.register({
@@ -132,6 +140,11 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [linkEditor, setLinkEditor] = useState<LinkEditorState | null>(null);
+  const [mode, setMode] = useState<DocumentEditorMode>("visual");
+  const [sourceDraft, setSourceDraft] = useState("");
+  const [sourceBaseline, setSourceBaseline] = useState("");
+  const [sourceError, setSourceError] = useState("");
+  const [sourceSaved, setSourceSaved] = useState(false);
   const [slash, setSlash] = useState<SlashState | null>(null);
   const slashRef = useRef<SlashState | null>(null);
 
@@ -303,6 +316,73 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       y,
       href: (current.getAttributes("link").href as string | undefined) ?? "",
     });
+  }
+
+  function selectEditorMode(nextMode: DocumentEditorMode) {
+    if (nextMode === mode) return;
+    if (nextMode === "source") {
+      const current = editorRef.current;
+      if (!current) return;
+      const source = current.getHTML();
+      setContextMenu(null);
+      setSlashState(null);
+      setLinkEditor(null);
+      setSourceDraft(source);
+      setSourceBaseline(source);
+      setSourceError("");
+      setSourceSaved(false);
+      setMode("source");
+      return;
+    }
+    if (sourceDraft !== sourceBaseline) {
+      applySource(true);
+      return;
+    }
+    setMode("visual");
+  }
+
+  function applySource(returnToVisual = false): boolean {
+    const current = editorRef.current;
+    if (!current) {
+      setSourceError("The document editor is not ready.");
+      return false;
+    }
+    const validationError = validateDocumentBodySource(sourceDraft);
+    if (validationError) {
+      setSourceError(validationError);
+      setSourceSaved(false);
+      return false;
+    }
+    try {
+      const applied = current.commands.setContent(
+        sourceDraft.trim() || "<p></p>",
+        true,
+        { preserveWhitespace: "full" },
+      );
+      if (!applied) throw new Error("The editor could not parse this document body.");
+      const normalized = current.getHTML();
+      setSourceDraft(normalized);
+      setSourceBaseline(normalized);
+      setSourceError("");
+      setSourceSaved(true);
+      window.setTimeout(() => setSourceSaved(false), 1200);
+      if (returnToVisual) setMode("visual");
+      return true;
+    } catch (reason) {
+      setSourceError(reason instanceof Error ? reason.message : "The document body is not valid HTML.");
+      setSourceSaved(false);
+      return false;
+    }
+  }
+
+  function discardSource() {
+    const current = editorRef.current;
+    if (!current) return;
+    const source = current.getHTML();
+    setSourceDraft(source);
+    setSourceBaseline(source);
+    setSourceError("");
+    setSourceSaved(false);
   }
 
   async function insertImageFile(file: File): Promise<boolean> {
@@ -528,9 +608,75 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
-      <EditorToolbar editor={editor} onInsert={insertFromPalette} onEditLink={openLinkEditor} />
+      <div className={styles.documentModeBar} contentEditable={false}>
+        <div className={styles.segmentedControl} aria-label="Document view">
+          <button
+            className={mode === "visual" ? styles.segmentedControlActive : undefined}
+            aria-pressed={mode === "visual"}
+            onClick={() => selectEditorMode("visual")}
+          >
+            <Eye size={14} />
+            <span>Visual</span>
+          </button>
+          <button
+            className={mode === "source" ? styles.segmentedControlActive : undefined}
+            aria-pressed={mode === "source"}
+            onClick={() => selectEditorMode("source")}
+          >
+            <Code2 size={14} />
+            <span>Source</span>
+          </button>
+        </div>
+        {mode === "source" && (
+          <div className={styles.documentSourceActions}>
+            <button
+              type="button"
+              title="Discard source changes"
+              aria-label="Discard source changes"
+              disabled={sourceDraft === sourceBaseline}
+              onClick={discardSource}
+            >
+              <RotateCcw size={14} />
+            </button>
+            <button
+              type="button"
+              className={styles.documentSourceApply}
+              disabled={sourceDraft === sourceBaseline}
+              onClick={() => applySource(false)}
+            >
+              {sourceSaved ? <Check size={14} /> : <Save size={14} />}
+              <span>{sourceSaved ? "Applied" : "Apply"}</span>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className={mode === "visual" ? styles.documentToolbarSurface : styles.documentToolbarSurfaceHidden}>
+        <EditorToolbar editor={editor} onInsert={insertFromPalette} onEditLink={openLinkEditor} />
+      </div>
       <SelectionBubbleMenu editor={editor} onEditLink={openLinkEditor} />
-      <EditorContent editor={editor} />
+      <div className={mode === "visual" ? styles.documentVisualSurface : styles.documentVisualSurfaceHidden}>
+        <EditorContent editor={editor} />
+      </div>
+      <div className={mode === "source" ? styles.documentSourcePane : styles.documentSourcePaneHidden}>
+        {mode === "source" && (
+          <>
+          {sourceError && <div className={styles.documentSourceError} role="alert">{sourceError}</div>}
+          <Suspense fallback={<div className={styles.documentSourceLoading}>Loading source editor...</div>}>
+            <HtmlSourceEditor
+              value={sourceDraft}
+              ariaLabel="Document body HTML source"
+              autoFocus
+              onChange={(source) => {
+                setSourceDraft(source);
+                setSourceError("");
+                setSourceSaved(false);
+              }}
+              onSave={() => applySource(false)}
+            />
+          </Suspense>
+          </>
+        )}
+      </div>
       <LinkEditorPopover editor={editor} state={linkEditor} onClose={closeLinkEditor} />
       {imageInsertError && (
         <div className={styles.editorToast} contentEditable={false}>
