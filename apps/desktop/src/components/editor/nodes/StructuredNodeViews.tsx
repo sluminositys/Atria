@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { ChevronDown, ChevronRight, Copy, ExternalLink, ListOrdered, RefreshCcw, RotateCcw, WrapText } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  ImageUp,
+  ListOrdered,
+  Maximize2,
+  Palette,
+  RefreshCcw,
+  RotateCcw,
+  WrapText,
+} from "lucide-react";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
-import { toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
+import { importImageDataUrl, toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
+import { imageFileValidationError, readImageFileAsDataUrl } from "../imageFiles";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
@@ -16,7 +30,15 @@ type ImageNodeViewProps = NodeViewProps & {
   snapshot?: WorkspaceSnapshot;
 };
 
-const calloutTones = ["info", "note", "success", "warning", "danger"] as const;
+const calloutToneOptions = [
+  { value: "info", label: "Info" },
+  { value: "note", label: "Note" },
+  { value: "success", label: "Success" },
+  { value: "warning", label: "Warning" },
+  { value: "danger", label: "Danger" },
+] as const;
+
+type CalloutTone = (typeof calloutToneOptions)[number]["value"];
 
 export function CardNodeView(props: NodeViewProps) {
   const title = String(props.node.attrs.title ?? "");
@@ -24,9 +46,12 @@ export function CardNodeView(props: NodeViewProps) {
     <NodeViewWrapper>
       <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 260 }}>
         <section className={styles.documentCardNode}>
-          {(title || props.selected) && (
-            <EditableNodeTitle value={title} placeholder="Optional title" onCommit={(value) => props.updateAttributes({ title: value })} />
-          )}
+          <EditableNodeTitle
+            value={title}
+            placeholder="Optional title"
+            optional={!title}
+            onCommit={(value) => props.updateAttributes({ title: value })}
+          />
           <NodeViewContent className={styles.nodeRichBody} />
         </section>
       </DirectManipulationLayer>
@@ -35,20 +60,95 @@ export function CardNodeView(props: NodeViewProps) {
 }
 
 export function CalloutNodeView(props: NodeViewProps) {
-  const tone = String(props.node.attrs.tone ?? "info");
+  const requestedTone = String(props.node.attrs.tone ?? "info");
+  const tone = calloutToneOptions.some((item) => item.value === requestedTone) ? requestedTone as CalloutTone : "info";
   const title = String(props.node.attrs.title ?? "Note");
-  const nextTone = calloutTones[(calloutTones.indexOf(tone as (typeof calloutTones)[number]) + 1) % calloutTones.length] ?? "info";
+  const [toneMenuOpen, setToneMenuOpen] = useState(false);
+  const toneButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toneMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!toneMenuOpen) return;
+    const selectedItem = toneMenuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
+    selectedItem?.focus();
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!toneMenuRef.current?.contains(event.target as Node) && !toneButtonRef.current?.contains(event.target as Node)) {
+        setToneMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [toneMenuOpen]);
+
+  function chooseTone(value: CalloutTone) {
+    props.updateAttributes({ tone: value });
+    setToneMenuOpen(false);
+    toneButtonRef.current?.focus();
+  }
+
+  function handleToneMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(toneMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setToneMenuOpen(false);
+      toneButtonRef.current?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || !items.length) return;
+    event.preventDefault();
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  }
+
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 260 }}>
         <aside className={`${styles.documentCalloutNode} ${styles[`calloutTone_${tone}`]}`}>
           <div className={styles.calloutHeader}>
             <button
+              ref={toneButtonRef}
+              type="button"
               className={styles.calloutToneButton}
-              title={`Tone: ${tone}`}
+              title={`Tone: ${calloutToneOptions.find((item) => item.value === tone)?.label}`}
+              aria-label="Change callout tone"
+              aria-haspopup="menu"
+              aria-expanded={toneMenuOpen}
               contentEditable={false}
-              onClick={() => props.updateAttributes({ tone: nextTone })}
-            />
+              onClick={() => setToneMenuOpen((value) => !value)}
+            >
+              <Palette size={14} />
+              <span className={`${styles.calloutToneSwatch} ${styles[`calloutToneSwatch_${tone}`]}`} />
+              <ChevronDown size={12} />
+            </button>
+            {toneMenuOpen && (
+              <div
+                ref={toneMenuRef}
+                role="menu"
+                aria-label="Callout tone"
+                className={styles.calloutToneMenu}
+                contentEditable={false}
+                onKeyDown={handleToneMenuKeyDown}
+              >
+                {calloutToneOptions.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={tone === item.value}
+                    onClick={() => chooseTone(item.value)}
+                  >
+                    <span className={`${styles.calloutToneSwatch} ${styles[`calloutToneSwatch_${item.value}`]}`} />
+                    <span>{item.label}</span>
+                    {tone === item.value && <Check size={13} />}
+                  </button>
+                ))}
+              </div>
+            )}
             <EditableNodeTitle value={title} placeholder="Callout title" onCommit={(value) => props.updateAttributes({ title: value || "Note" })} />
           </div>
           <NodeViewContent className={styles.nodeRichBody} />
@@ -64,10 +164,57 @@ export function ImageNodeView(props: ImageNodeViewProps) {
   const alt = String(props.node.attrs.alt ?? caption);
   const resolvedSrc = toWorkspaceFileAssetUrl(props.snapshot, src);
   const [failed, setFailed] = useState(false);
+  const [altDraft, setAltDraft] = useState(alt);
+  const [naturalWidth, setNaturalWidth] = useState(0);
+  const [replaceState, setReplaceState] = useState<{ kind: "idle" | "busy" | "success" | "error"; message: string }>({
+    kind: "idle",
+    message: "",
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const altInputId = useId();
 
   useEffect(() => {
     setFailed(false);
+    setNaturalWidth(0);
   }, [resolvedSrc]);
+
+  useEffect(() => setAltDraft(alt), [alt]);
+
+  async function replaceImage(file: File) {
+    try {
+      const validationError = imageFileValidationError(file);
+      if (validationError) throw new Error(validationError);
+      if (!props.snapshot?.settings.workspacePath) throw new Error("Open a Workspace before replacing this image.");
+      setReplaceState({ kind: "busy", message: "Importing image..." });
+      const dataUrl = await readImageFileAsDataUrl(file);
+      const nextSrc = await importImageDataUrl(props.snapshot, dataUrl);
+      const nextAlt = alt.trim() || file.name;
+      props.updateAttributes({ src: nextSrc, alt: nextAlt });
+      setAltDraft(nextAlt);
+      setFailed(false);
+      setReplaceState({ kind: "success", message: "Image replaced" });
+    } catch (error) {
+      setReplaceState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Image replacement failed.",
+      });
+    }
+  }
+
+  function fitImage() {
+    const availableWidth = Math.max(120, Math.min(1280, props.editor.view.dom.clientWidth));
+    props.updateAttributes({ width: Math.round(availableWidth), offsetX: 0 });
+  }
+
+  function useActualImageSize() {
+    if (!naturalWidth) return;
+    props.updateAttributes({ width: Math.max(120, Math.min(1280, naturalWidth)), offsetX: 0 });
+  }
+
+  function commitAltText() {
+    const nextAlt = altDraft.trim();
+    if (nextAlt !== alt) props.updateAttributes({ alt: nextAlt });
+  }
 
   return (
     <NodeViewWrapper className={styles.imageNodeWrapper}>
@@ -79,18 +226,97 @@ export function ImageNodeView(props: ImageNodeViewProps) {
         lockAspectRatioOnCorner
       >
         <figure className={styles.imageNode}>
+          {props.selected && (
+            <div className={styles.imageNodeToolbar} contentEditable={false}>
+              <button
+                type="button"
+                aria-label="Replace image"
+                title="Replace image"
+                disabled={replaceState.kind === "busy" || !props.snapshot}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImageUp size={15} />
+              </button>
+              <button
+                type="button"
+                aria-label="Fit image to document"
+                title="Fit to document"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={fitImage}
+              >
+                <Maximize2 size={15} />
+              </button>
+              <button
+                type="button"
+                aria-label="Use actual image size"
+                title="Actual size"
+                disabled={!naturalWidth}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={useActualImageSize}
+              >
+                <RotateCcw size={15} />
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            hidden
+            type="file"
+            accept="image/*"
+            aria-label="Replace image file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void replaceImage(file);
+              event.currentTarget.value = "";
+            }}
+          />
           {src && !failed ? (
-            <img src={resolvedSrc} alt={alt} onError={() => setFailed(true)} />
+            <img
+              src={resolvedSrc}
+              alt={alt}
+              onLoad={(event) => {
+                setFailed(false);
+                setNaturalWidth(event.currentTarget.naturalWidth);
+              }}
+              onError={() => setFailed(true)}
+            />
           ) : (
             <div className={styles.imageErrorCard} contentEditable={false}>
               <strong>Image unavailable</strong>
-              <span>{src || "No image source"}</span>
-              {src && (
-                <button onClick={() => setFailed(false)}>
+              <span>{src ? "The source file could not be loaded." : "This image has no source file."}</span>
+              <div>
+                {src && <button type="button" onClick={() => setFailed(false)}>
                   <RotateCcw size={14} />
                   Retry
+                </button>}
+                <button type="button" disabled={!props.snapshot} onClick={() => fileInputRef.current?.click()}>
+                  <ImageUp size={14} />
+                  Replace
                 </button>
-              )}
+              </div>
+            </div>
+          )}
+          {props.selected && (
+            <div className={styles.imageMetadataPanel} contentEditable={false}>
+              <label htmlFor={altInputId}>Alt text</label>
+              <input
+                id={altInputId}
+                value={altDraft}
+                placeholder="Describe the image"
+                onChange={(event) => setAltDraft(event.target.value)}
+                onBlur={commitAltText}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  } else if (event.key === "Escape") {
+                    setAltDraft(alt);
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <span role="status" data-state={replaceState.kind}>{replaceState.message}</span>
             </div>
           )}
           {(caption || props.selected) && (
@@ -184,7 +410,25 @@ export function CodeBlockNodeView(props: NodeViewProps) {
   const lineNumbers = Boolean(props.node.attrs.lineNumbers ?? true);
   const wrap = Boolean(props.node.attrs.wrap ?? false);
   const lineNumberRef = useRef<HTMLDivElement | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const lines = Math.max(1, codeText.split("\n").length);
+
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function copyCode() {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(codeText);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -195,7 +439,7 @@ export function CodeBlockNodeView(props: NodeViewProps) {
       >
         <section className={styles.documentCodeNode}>
           <div className={styles.codeBlockHeader} contentEditable={false}>
-            <select value={language} onChange={(event) => props.updateAttributes({ language: event.target.value })}>
+            <select aria-label="Code language" value={language} onChange={(event) => props.updateAttributes({ language: event.target.value })}>
               {["text", "bash", "python", "javascript", "typescript", "json", "yaml", "rust", "markdown"].map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -206,6 +450,8 @@ export function CodeBlockNodeView(props: NodeViewProps) {
               <button
                 className={lineNumbers ? styles.codeHeaderButtonActive : undefined}
                 title="Toggle line numbers"
+                aria-label="Toggle line numbers"
+                aria-pressed={lineNumbers}
                 onClick={() => props.updateAttributes({ lineNumbers: !lineNumbers })}
               >
                 <ListOrdered size={13} />
@@ -213,13 +459,23 @@ export function CodeBlockNodeView(props: NodeViewProps) {
               <button
                 className={wrap ? styles.codeHeaderButtonActive : undefined}
                 title="Toggle line wrapping"
+                aria-label="Toggle line wrapping"
+                aria-pressed={wrap}
                 onClick={() => props.updateAttributes({ wrap: !wrap })}
               >
                 <WrapText size={13} />
               </button>
-              <button title="Copy code" onClick={() => void navigator.clipboard?.writeText(codeText)}>
-                <Copy size={13} />
+              <button
+                className={copyState === "error" ? styles.codeCopyError : undefined}
+                title={copyState === "copied" ? "Code copied" : copyState === "error" ? "Copy failed" : "Copy code"}
+                aria-label={copyState === "copied" ? "Code copied" : copyState === "error" ? "Copy failed" : "Copy code"}
+                onClick={() => void copyCode()}
+              >
+                {copyState === "copied" ? <Check size={13} /> : <Copy size={13} />}
               </button>
+              <span className={styles.visuallyHidden} role="status">
+                {copyState === "copied" ? "Code copied" : copyState === "error" ? "Copy failed" : ""}
+              </span>
             </span>
           </div>
           <div
@@ -460,28 +716,42 @@ export function LegacyNodeView(props: NodeViewProps) {
 function EditableNodeTitle({
   value,
   placeholder,
+  optional = false,
   onCommit,
 }: {
   value: string;
   placeholder: string;
+  optional?: boolean;
   onCommit(value: string): void;
 }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  function commit() {
+    const nextValue = draft.trim();
+    if (nextValue !== value) onCommit(nextValue);
+  }
+
   return (
-    <div
-      className={styles.nodeTitleEditable}
-      contentEditable
-      suppressContentEditableWarning
-      data-placeholder={placeholder}
-      onBlur={(event) => onCommit(event.currentTarget.textContent?.trim() ?? "")}
+    <input
+      type="text"
+      className={[styles.nodeTitleEditable, optional ? styles.nodeTitleEditableOptional : ""].join(" ")}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          setDraft(value);
           event.currentTarget.blur();
         }
       }}
-    >
-      {value}
-    </div>
+    />
   );
 }
 

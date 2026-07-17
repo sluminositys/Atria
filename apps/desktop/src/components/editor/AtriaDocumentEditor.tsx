@@ -64,6 +64,7 @@ import { TrailingParagraph } from "./extensions/TrailingParagraph";
 import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
 import { validateDocumentBodySource } from "./documentSource";
+import { imageFileValidationError, readImageFileAsDataUrl } from "./imageFiles";
 import styles from "../../app/App.module.css";
 
 const HtmlSourceEditor = lazy(() =>
@@ -397,7 +398,9 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       if (!snapshot?.settings.workspacePath) {
         throw new Error("Open or create a workspace before inserting a local image.");
       }
-      const dataUrl = await readFileAsDataUrl(file);
+      const validationError = imageFileValidationError(file);
+      if (validationError) throw new Error(validationError);
+      const dataUrl = await readImageFileAsDataUrl(file);
       const src = await importImageDataUrl(snapshot, dataUrl);
       return insertImage(src, file.name);
     } catch (error) {
@@ -1233,17 +1236,5 @@ function createLegacyNode() {
     addNodeView() {
       return ReactNodeViewRenderer(LegacyNodeView);
     },
-  });
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("Failed to read image"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
-    reader.readAsDataURL(file);
   });
 }
