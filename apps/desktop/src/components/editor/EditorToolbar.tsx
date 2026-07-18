@@ -59,7 +59,8 @@ export function EditorToolbar({ editor, onInsert, onEditLink }: EditorToolbarPro
   }
 
   return (
-    <div className={styles.editorToolbar} role="toolbar" aria-label="Document formatting">
+    <>
+      <div className={styles.editorToolbar} role="toolbar" aria-label="Document formatting">
       <select
         className={styles.toolbarSelect}
         aria-label="Text style"
@@ -135,9 +136,12 @@ export function EditorToolbar({ editor, onInsert, onEditLink }: EditorToolbarPro
           <Minus size={15} />
         </ToolbarButton>
       </ToolbarGroup>
+    </div>
 
       {editor.isActive("table") && (
-        <ToolbarGroup>
+        <div className={styles.tableContextToolbar} role="toolbar" aria-label="Table formatting">
+          <span className={styles.tableContextLabel}><Table2 size={14} />Table</span>
+          <ToolbarGroup>
           <ToolbarButton label="Insert row above" onMouseDown={(event) => run(event, () => editor.chain().focus().addRowBefore().run())}>
             <BetweenHorizontalStart size={15} />
           </ToolbarButton>
@@ -179,11 +183,8 @@ export function EditorToolbar({ editor, onInsert, onEditLink }: EditorToolbarPro
           <ToolbarButton label="Delete table" onMouseDown={(event) => run(event, () => editor.chain().focus().deleteTable().run())}>
             <Trash2 size={15} />
           </ToolbarButton>
-        </ToolbarGroup>
-      )}
-
-      {editor.isActive("table") && (
-        <ToolbarGroup>
+          </ToolbarGroup>
+          <ToolbarGroup>
           <ToolbarButton
             label="Align cell text left"
             active={currentCellAttribute(editor, "textAlign") === "left"}
@@ -223,9 +224,10 @@ export function EditorToolbar({ editor, onInsert, onEditLink }: EditorToolbarPro
               onMouseDown={(event) => run(event, () => editor.chain().focus().setCellAttribute("cellTone", value).run())}
             />
           ))}
-        </ToolbarGroup>
+          </ToolbarGroup>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 

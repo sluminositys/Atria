@@ -14,10 +14,14 @@ export class TableInteractionView extends TableView implements NodeView {
   private readonly surface: HTMLElement;
   private readonly chrome: HTMLElement;
   private readonly resizeHandles: HTMLElement;
+  private readonly moreButton: HTMLButtonElement;
+  private readonly actionMenu: HTMLElement;
+  private currentNode: ProseMirrorNode;
 
   constructor(node: ProseMirrorNode, cellMinWidth: number, view: EditorView) {
     super(node, cellMinWidth);
     this.view = view;
+    this.currentNode = node;
     this.dom.classList.add(style("nodeInteractionLayer"), style("tableInteractionLayer"));
     this.table.classList.add(style("documentTable"));
 
@@ -26,15 +30,21 @@ export class TableInteractionView extends TableView implements NodeView {
     this.dom.insertBefore(this.surface, this.table);
     this.surface.appendChild(this.table);
 
-    this.chrome = this.createChrome();
+    const chrome = this.createChrome();
+    this.chrome = chrome.element;
+    this.moreButton = chrome.moreButton;
+    this.actionMenu = this.createActionMenu();
     this.resizeHandles = this.createResizeHandles();
-    this.dom.append(this.chrome, this.resizeHandles);
+    this.dom.append(this.chrome, this.actionMenu, this.resizeHandles);
     this.syncLayout(node);
   }
 
   override update(node: ProseMirrorNode): boolean {
     const updated = super.update(node);
-    if (updated) this.syncLayout(node);
+    if (updated) {
+      this.currentNode = node;
+      this.syncLayout(node);
+    }
     return updated;
   }
 
@@ -44,17 +54,28 @@ export class TableInteractionView extends TableView implements NodeView {
 
   deselectNode() {
     this.dom.classList.remove(style("nodeInteractionSelected"));
+    this.closeActionMenu();
   }
 
   override ignoreMutation(mutation: ViewMutationRecord): boolean {
     const target = mutation.target;
-    if (target === this.dom || target === this.surface || this.chrome.contains(target) || this.resizeHandles.contains(target)) {
+    if (
+      target === this.dom
+      || target === this.surface
+      || this.chrome.contains(target)
+      || this.actionMenu.contains(target)
+      || this.resizeHandles.contains(target)
+    ) {
       return true;
     }
     return super.ignoreMutation(mutation);
   }
 
-  private createChrome(): HTMLElement {
+  destroy() {
+    this.removeMenuListeners();
+  }
+
+  private createChrome(): { element: HTMLElement; moreButton: HTMLButtonElement } {
     const chrome = document.createElement("div");
     chrome.className = style("nodeChrome");
     chrome.contentEditable = "false";
@@ -63,6 +84,7 @@ export class TableInteractionView extends TableView implements NodeView {
     drag.className = style("nodeDragHandle");
     drag.type = "button";
     drag.title = "Drag table";
+    drag.setAttribute("aria-label", "Drag table");
     drag.draggable = true;
     drag.setAttribute("data-drag-handle", "");
     const glyph = document.createElement("span");
@@ -71,8 +93,165 @@ export class TableInteractionView extends TableView implements NodeView {
     drag.appendChild(glyph);
     drag.addEventListener("mousedown", () => this.selectTableNode());
 
-    chrome.append(drag);
-    return chrome;
+    const more = document.createElement("button");
+    more.className = style("nodeMoreButton");
+    more.type = "button";
+    more.title = "Table actions";
+    more.setAttribute("aria-label", "Table actions");
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    const moreGlyph = document.createElement("span");
+    moreGlyph.className = style("tableMoreGlyph");
+    moreGlyph.setAttribute("aria-hidden", "true");
+    more.appendChild(moreGlyph);
+    more.addEventListener("pointerdown", (event) => event.stopPropagation());
+    more.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.selectTableNode();
+      this.toggleActionMenu();
+    });
+
+    chrome.append(drag, more);
+    return { element: chrome, moreButton: more };
+  }
+
+  private createActionMenu(): HTMLElement {
+    const menu = document.createElement("div");
+    menu.className = style("nodeMoreMenu");
+    menu.hidden = true;
+    menu.contentEditable = "false";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Table actions");
+    menu.addEventListener("pointerdown", (event) => event.stopPropagation());
+    menu.addEventListener("mousedown", (event) => event.preventDefault());
+    menu.addEventListener("keydown", (event) => this.handleMenuKeyDown(event));
+
+    menu.append(
+      this.createMenuLabel("Layout"),
+      this.createChoiceRow(["normal", "wide", "full"], "layout"),
+      this.createMenuLabel("Align"),
+      this.createChoiceRow(["left", "center", "right"], "align"),
+      this.createMenuLabel("Actions"),
+      this.createMenuButton("Duplicate", () => this.duplicateTable()),
+      this.createMenuButton("Delete", () => this.deleteTable()),
+    );
+    return menu;
+  }
+
+  private createMenuLabel(text: string): HTMLLabelElement {
+    const label = document.createElement("label");
+    label.textContent = text;
+    return label;
+  }
+
+  private createChoiceRow(values: string[], attribute: "layout" | "align"): HTMLDivElement {
+    const row = document.createElement("div");
+    values.forEach((value) => {
+      const button = this.createMenuButton(value, () => {
+        this.updateTableAttrs({ [attribute]: value });
+        this.closeActionMenu(true);
+      });
+      button.dataset.tableChoice = `${attribute}:${value}`;
+      button.setAttribute("role", "menuitemradio");
+      row.appendChild(button);
+    });
+    return row;
+  }
+
+  private createMenuButton(text: string, action: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = style("nodeTool");
+    button.setAttribute("role", "menuitem");
+    const label = document.createElement("span");
+    label.textContent = text;
+    button.appendChild(label);
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  private toggleActionMenu() {
+    if (this.actionMenu.hidden) this.openActionMenu();
+    else this.closeActionMenu(true);
+  }
+
+  private openActionMenu() {
+    this.syncActionMenu();
+    this.actionMenu.hidden = false;
+    this.moreButton.setAttribute("aria-expanded", "true");
+    window.addEventListener("pointerdown", this.handleOutsidePointer);
+    window.addEventListener("keydown", this.handleWindowKeyDown);
+    window.requestAnimationFrame(() => this.actionMenu.querySelector<HTMLButtonElement>("button")?.focus());
+  }
+
+  private closeActionMenu(restoreFocus = false) {
+    if (this.actionMenu.hidden) return;
+    this.actionMenu.hidden = true;
+    this.moreButton.setAttribute("aria-expanded", "false");
+    this.removeMenuListeners();
+    if (restoreFocus) this.moreButton.focus();
+  }
+
+  private removeMenuListeners() {
+    window.removeEventListener("pointerdown", this.handleOutsidePointer);
+    window.removeEventListener("keydown", this.handleWindowKeyDown);
+  }
+
+  private readonly handleOutsidePointer = (event: PointerEvent) => {
+    const target = event.target as Node;
+    if (!this.actionMenu.contains(target) && !this.moreButton.contains(target)) this.closeActionMenu();
+  };
+
+  private readonly handleWindowKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.closeActionMenu(true);
+    }
+  };
+
+  private handleMenuKeyDown(event: KeyboardEvent) {
+    const buttons = Array.from(this.actionMenu.querySelectorAll<HTMLButtonElement>("button"));
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || !buttons.length) return;
+    event.preventDefault();
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? buttons.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  }
+
+  private syncActionMenu() {
+    const attrs = this.currentNode.attrs as { layout?: NodeLayout; align?: NodeAlign };
+    this.actionMenu.querySelectorAll<HTMLButtonElement>("[data-table-choice]").forEach((button) => {
+      const [attribute, value] = button.dataset.tableChoice?.split(":") ?? [];
+      const active = attrs[attribute as "layout" | "align"] === value;
+      button.className = style(active ? "nodeToolActive" : "nodeTool");
+      button.setAttribute("aria-checked", String(active));
+    });
+  }
+
+  private duplicateTable() {
+    const pos = this.findTablePos();
+    const node = pos === null ? null : this.view.state.doc.nodeAt(pos);
+    if (pos === null || !node) return;
+    const attrs = { ...node.attrs, atriaId: crypto.randomUUID() };
+    const duplicate = node.type.create(attrs, node.content, node.marks);
+    const duplicatePos = pos + node.nodeSize;
+    const transaction = this.view.state.tr.insert(duplicatePos, duplicate);
+    this.view.dispatch(transaction.setSelection(NodeSelection.create(transaction.doc, duplicatePos)));
+    this.closeActionMenu();
+  }
+
+  private deleteTable() {
+    const pos = this.findTablePos();
+    const node = pos === null ? null : this.view.state.doc.nodeAt(pos);
+    if (pos === null || !node) return;
+    this.closeActionMenu();
+    this.view.dispatch(this.view.state.tr.delete(pos, pos + node.nodeSize));
+    this.view.focus();
   }
 
   private createResizeHandles(): HTMLElement {
@@ -160,6 +339,7 @@ export class TableInteractionView extends TableView implements NodeView {
 
   private syncLayout(node: ProseMirrorNode) {
     const attrs = node.attrs as {
+      atriaId?: string | null;
       layout?: NodeLayout;
       align?: NodeAlign;
       width?: number | string | null;
@@ -169,6 +349,8 @@ export class TableInteractionView extends TableView implements NodeView {
     const align = attrs.align ?? "center";
     const width = cssDimension(attrs.width);
     const offsetX = dimensionToNumber(attrs.offsetX) ?? 0;
+    if (attrs.atriaId) this.dom.setAttribute("data-atria-id", attrs.atriaId);
+    else this.dom.removeAttribute("data-atria-id");
     this.dom.classList.remove(
       style("nodeFrameLayout_normal"),
       style("nodeFrameLayout_wide"),
