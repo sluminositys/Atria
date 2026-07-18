@@ -5,6 +5,8 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Code2,
+  Eye,
   ExternalLink,
   ImageUp,
   ListOrdered,
@@ -17,6 +19,7 @@ import {
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { importImageDataUrl, toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { imageFileValidationError, readImageFileAsDataUrl } from "../imageFiles";
+import { formatMermaidError } from "../renderNodeErrors";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
@@ -39,6 +42,8 @@ const calloutToneOptions = [
 ] as const;
 
 type CalloutTone = (typeof calloutToneOptions)[number]["value"];
+
+const defaultMermaidSource = "flowchart TD\n  A[Atria] --> B[Result]";
 
 export function CardNodeView(props: NodeViewProps) {
   const title = String(props.node.attrs.title ?? "");
@@ -502,34 +507,40 @@ export function MermaidNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
+  const [rendering, setRendering] = useState(true);
+  const renderSequenceRef = useRef(0);
   const code = String(props.node.attrs.code ?? "");
+  const { copyState, copy } = useCopyFeedback(code);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
   }, [props.selected]);
 
   useEffect(() => {
-    if (editing) return;
     let active = true;
-    void import("../renderers/mermaidRenderer")
-      .then(({ renderMermaid }) => renderMermaid(
-        `atria-mermaid-${props.node.attrs.atriaId ?? Math.random().toString(36).slice(2)}`,
-        code,
-      ))
-      .then((svg) => {
-        if (!active) return;
-        setHtml(svg);
-        setError("");
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        setHtml("");
-        setError(reason instanceof Error ? reason.message : "Mermaid render failed");
-      });
+    setRendering(true);
+    const timer = window.setTimeout(() => {
+      const sequence = ++renderSequenceRef.current;
+      const nodeId = String(props.node.attrs.atriaId ?? "node").replace(/[^a-zA-Z0-9_-]/g, "-");
+      void import("../renderers/mermaidRenderer")
+        .then(({ renderMermaid }) => renderMermaid(`atria-mermaid-${nodeId}-${sequence}-${crypto.randomUUID()}`, code))
+        .then((svg) => {
+          if (!active || sequence !== renderSequenceRef.current) return;
+          setHtml(svg);
+          setError("");
+          setRendering(false);
+        })
+        .catch((reason: unknown) => {
+          if (!active || sequence !== renderSequenceRef.current) return;
+          setError(formatMermaidError(reason));
+          setRendering(false);
+        });
+    }, 220);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, [code, editing, props.node.attrs.atriaId]);
+  }, [code, props.node.attrs.atriaId]);
 
   return (
     <NodeViewWrapper>
@@ -540,13 +551,33 @@ export function MermaidNodeView(props: NodeViewProps) {
         resizeBounds={{ minWidth: 260, minHeight: 160, maxWidth: 1280, maxHeight: 900 }}
       >
         <section className={styles.documentRenderNode}>
-          <PreviewToggle editing={editing} onToggle={() => setEditing((value) => !value)} />
+          <RenderNodeToolbar
+            kind="Mermaid"
+            editing={editing}
+            copyState={copyState}
+            onModeChange={setEditing}
+            onCopy={() => void copy()}
+            onReset={() => props.updateAttributes({ code: defaultMermaidSource })}
+          />
           {editing ? (
-            <textarea value={code} onChange={(event) => props.updateAttributes({ code: event.target.value })} />
-          ) : error ? (
-            <div className={styles.nodeError}>{error}</div>
+            <div className={styles.renderSourcePane}>
+              <textarea
+                aria-label="Mermaid source"
+                spellCheck={false}
+                value={code}
+                onChange={(event) => props.updateAttributes({ code: event.target.value })}
+              />
+              {error && <RenderNodeError message={error} />}
+            </div>
           ) : (
-            <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
+            <div className={styles.renderPreviewPane} aria-busy={rendering}>
+              {html ? (
+                <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
+              ) : rendering ? (
+                <div className={styles.renderNodeLoading}>Rendering diagram...</div>
+              ) : null}
+              {error && <RenderNodeError message={error} />}
+            </div>
           )}
         </section>
       </DirectManipulationLayer>
@@ -764,6 +795,82 @@ function EditableInline({ value, onCommit }: { value: string; onCommit(value: st
     >
       {value}
     </span>
+  );
+}
+
+type CopyFeedbackState = "idle" | "copied" | "error";
+
+function useCopyFeedback(value: string) {
+  const [copyState, setCopyState] = useState<CopyFeedbackState>("idle");
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function copy() {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(value);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  return { copyState, copy };
+}
+
+function RenderNodeToolbar({
+  kind,
+  editing,
+  copyState,
+  onModeChange,
+  onCopy,
+  onReset,
+}: {
+  kind: string;
+  editing: boolean;
+  copyState: CopyFeedbackState;
+  onModeChange(editing: boolean): void;
+  onCopy(): void;
+  onReset(): void;
+}) {
+  const copyLabel = copyState === "copied" ? `${kind} source copied` : copyState === "error" ? `Copy ${kind} source failed` : `Copy ${kind} source`;
+  return (
+    <div className={styles.renderNodeToolbar} contentEditable={false}>
+      <strong>{kind}</strong>
+      <div className={styles.renderModeControl} aria-label={`${kind} mode`}>
+        <button type="button" aria-pressed={!editing} onClick={() => onModeChange(false)}>
+          <Eye size={13} />
+          <span>Preview</span>
+        </button>
+        <button type="button" aria-pressed={editing} onClick={() => onModeChange(true)}>
+          <Code2 size={13} />
+          <span>Source</span>
+        </button>
+      </div>
+      <div className={styles.renderNodeActions}>
+        <button type="button" data-render-copy aria-label={copyLabel} title={copyLabel} onClick={onCopy}>
+          {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
+        </button>
+        <button type="button" data-render-reset aria-label={`Reset ${kind} source`} title="Reset source" onClick={onReset}>
+          <RotateCcw size={14} />
+        </button>
+      </div>
+      <span className={styles.visuallyHidden} role="status">
+        {copyState === "copied" ? `${kind} source copied` : copyState === "error" ? `Copy ${kind} source failed` : ""}
+      </span>
+    </div>
+  );
+}
+
+function RenderNodeError({ message }: { message: string }) {
+  return (
+    <div className={styles.renderNodeError} role="alert">
+      <strong>Could not render</strong>
+      <span>{message}</span>
+    </div>
   );
 }
 
