@@ -19,7 +19,7 @@ import {
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { importImageDataUrl, toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { imageFileValidationError, readImageFileAsDataUrl } from "../imageFiles";
-import { formatMermaidError } from "../renderNodeErrors";
+import { formatLatexError, formatMermaidError } from "../renderNodeErrors";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
@@ -44,6 +44,7 @@ const calloutToneOptions = [
 type CalloutTone = (typeof calloutToneOptions)[number]["value"];
 
 const defaultMermaidSource = "flowchart TD\n  A[Atria] --> B[Result]";
+const defaultLatexSource = String.raw`E = mc^2`;
 
 export function CardNodeView(props: NodeViewProps) {
   const title = String(props.node.attrs.title ?? "");
@@ -589,7 +590,8 @@ export function LatexNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const formula = String(props.node.attrs.formula ?? "");
   const display = Boolean(props.node.attrs.display ?? true);
-  const html = useLatexHtml(formula, display);
+  const { html, error, rendering } = useLatexRender(formula, display);
+  const { copyState, copy } = useCopyFeedback(formula);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
@@ -601,19 +603,50 @@ export function LatexNodeView(props: NodeViewProps) {
         {...props}
         className={styles.nodeBlockObject}
         resizeMode="width"
-        resizeBounds={{ minWidth: 180, maxWidth: 980 }}
+        resizeBounds={{ minWidth: 260, maxWidth: 980 }}
       >
         <section className={styles.documentRenderNode}>
-          <PreviewToggle editing={editing} onToggle={() => setEditing((value) => !value)} />
+          <RenderNodeToolbar
+            kind="LaTeX"
+            editing={editing}
+            copyState={copyState}
+            onModeChange={setEditing}
+            onCopy={() => void copy()}
+            onReset={() => props.updateAttributes({ formula: defaultLatexSource, display: true })}
+          />
           {editing ? (
-            <MathSourceInput
-              value={formula}
-              multiline
-              ariaLabel="Display formula"
-              onChange={(value) => props.updateAttributes({ formula: value })}
-            />
+            <div className={styles.renderSourcePane}>
+              <MathSourceInput
+                value={formula}
+                multiline
+                ariaLabel="LaTeX source"
+                onChange={(value) => props.updateAttributes({ formula: value })}
+              />
+              <fieldset className={styles.latexLayoutControl}>
+                <legend>Formula layout</legend>
+                <button
+                  type="button"
+                  aria-pressed={display}
+                  onClick={() => props.updateAttributes({ display: true })}
+                >
+                  Display
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!display}
+                  onClick={() => props.updateAttributes({ display: false })}
+                >
+                  Inline
+                </button>
+              </fieldset>
+              {error && <RenderNodeError message={error} />}
+            </div>
           ) : (
-            <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} />
+            <div className={`${styles.renderPreviewPane} ${styles.latexPreviewPane}`} aria-busy={rendering}>
+              {html ? <div className={styles.renderedBlock} dangerouslySetInnerHTML={{ __html: html }} /> : null}
+              {!html && rendering ? <div className={styles.renderNodeLoading}>Rendering formula...</div> : null}
+              {error && <RenderNodeError message={error} />}
+            </div>
           )}
         </section>
       </DirectManipulationLayer>
@@ -624,7 +657,7 @@ export function LatexNodeView(props: NodeViewProps) {
 export function InlineMathNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const formula = String(props.node.attrs.formula ?? "x");
-  const html = useLatexHtml(formula, false);
+  const { html, error } = useLatexRender(formula, false);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
@@ -645,6 +678,10 @@ export function InlineMathNodeView(props: NodeViewProps) {
           onBlur={() => setEditing(false)}
           onExit={() => setEditing(false)}
         />
+      ) : error ? (
+        <span className={styles.inlineMathError} role="img" aria-label={`Invalid formula: ${error}`} title={error}>
+          Invalid formula
+        </span>
       ) : (
         <span dangerouslySetInnerHTML={{ __html: html }} />
       )}
@@ -882,16 +919,33 @@ function PreviewToggle({ editing, onToggle }: { editing: boolean; onToggle(): vo
   );
 }
 
-function useLatexHtml(formula: string, displayMode: boolean): string {
+function useLatexRender(formula: string, displayMode: boolean) {
   const [html, setHtml] = useState("");
+  const [error, setError] = useState("");
+  const [rendering, setRendering] = useState(true);
   useEffect(() => {
     let active = true;
-    void import("../renderers/latexRenderer").then(({ renderLatex }) => {
-      if (active) setHtml(renderLatex(formula, displayMode));
-    });
+    setRendering(true);
+    void import("../renderers/latexRenderer")
+      .then(({ renderLatex }) => {
+        if (!active) return;
+        try {
+          setHtml(renderLatex(formula, displayMode));
+          setError("");
+        } catch (reason: unknown) {
+          setError(formatLatexError(reason));
+        } finally {
+          setRendering(false);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setError(formatLatexError(reason));
+        setRendering(false);
+      });
     return () => {
       active = false;
     };
   }, [displayMode, formula]);
-  return html;
+  return { html, error, rendering };
 }

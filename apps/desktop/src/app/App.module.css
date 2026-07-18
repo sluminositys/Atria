@@ -2783,6 +2783,13 @@
   outline: none;
 }
 
+.inlineMathError {
+  color: #9b3833;
+  font-size: 12px;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
 .documentTable {
   width: 100%;
   margin: 14px 0;
@@ -3944,7 +3951,78 @@
   border: 1px solid var(--atria-soft-line);
   border-radius: 6px;
   background: white;
+  color: var(--atria-text);
+  font-family: var(--atria-mono);
+  font-size: 13px;
   line-height: 1.55;
+  outline: none;
+  resize: vertical;
+}
+
+.renderSourcePane textarea:focus-visible {
+  border-color: #91bdf5;
+  box-shadow: 0 0 0 2px rgb(47 128 237 / 11%);
+}
+
+.latexLayoutControl {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.latexLayoutControl legend {
+  float: left;
+  margin-right: 7px;
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.latexLayoutControl button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-soft-line);
+  background: white;
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.latexLayoutControl button:first-of-type {
+  border-radius: 5px 0 0 5px;
+}
+
+.latexLayoutControl button:last-child {
+  margin-left: -4px;
+  border-radius: 0 5px 5px 0;
+}
+
+.latexLayoutControl button[aria-pressed="true"] {
+  z-index: 1;
+  border-color: #a9c9ef;
+  background: var(--atria-blue-soft);
+  color: #1f5f9f;
+}
+
+.latexPreviewPane {
+  min-height: 112px;
+  justify-content: center;
+}
+
+.latexPreviewPane .renderedBlock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.latexPreviewPane :global(.katex-display) {
+  width: 100%;
+  margin: 0.5em 0;
+  overflow: visible;
 }
 
 .renderedBlock {
