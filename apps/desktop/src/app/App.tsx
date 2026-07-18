@@ -214,7 +214,7 @@ export function App() {
                 onRestored={async () => setSnapshot(await loadWorkspace(snapshot.settings.workspacePath))}
               />
             ) : activePage ? (
-              <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
+              <PageEditor key={activePage.id} page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
             ) : activeArtifact ? (
               <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
             ) : activeAsset && snapshot ? (

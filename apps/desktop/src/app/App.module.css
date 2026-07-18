@@ -498,15 +498,27 @@
 }
 
 .pageTitle {
+  box-sizing: border-box;
   width: 100%;
   margin: 0 0 12px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: #37352f;
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 720;
   line-height: 1.2;
+  letter-spacing: 0;
   outline: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  resize: none;
+}
+
+.pageTitleError {
+  margin: -6px 0 12px;
+  color: #c2413a;
+  font-size: 12px;
 }
 
 .pageMetaCompact {
@@ -2367,7 +2379,7 @@
   }
 
   .pageTitle {
-    font-size: 34px;
+    font-size: 32px;
   }
 }
 
