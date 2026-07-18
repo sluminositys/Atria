@@ -65,6 +65,7 @@ import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
 import { validateDocumentBodySource } from "./documentSource";
 import { imageFileValidationError, readImageFileAsDataUrl } from "./imageFiles";
+import { defaultHtmlSource } from "./htmlPreview";
 import styles from "../../app/App.module.css";
 
 const HtmlSourceEditor = lazy(() =>
@@ -589,8 +590,8 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       case "custom-html":
       case "html":
         insertBlockAtSelection(current, {
-            type: "atriaHtml",
-            attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" },
+          type: "atriaHtml",
+            attrs: { html: defaultHtmlSource, width: 820, height: 320, layout: "wide", align: "center" },
           });
         return;
       case "drawing":
@@ -1105,7 +1106,7 @@ function createHtmlNode() {
     draggable: true,
     addAttributes() {
       return {
-        html: { default: "<section></section>" },
+        html: { default: defaultHtmlSource },
         width: { default: 820 },
         height: { default: 320 },
         ...layoutAttributes,

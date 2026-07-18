@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import {
   Check,
@@ -15,14 +16,20 @@ import {
   RefreshCcw,
   RotateCcw,
   WrapText,
+  X,
 } from "lucide-react";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
 import { importImageDataUrl, toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
 import { imageFileValidationError, readImageFileAsDataUrl } from "../imageFiles";
+import { buildHtmlPreviewDocument, defaultHtmlSource } from "../htmlPreview";
 import { formatLatexError, formatMermaidError } from "../renderNodeErrors";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
 import styles from "../../../app/App.module.css";
+
+const HtmlSourceEditor = lazy(() =>
+  import("../HtmlSourceEditor").then((module) => ({ default: module.HtmlSourceEditor })),
+);
 
 type ArtifactNodeViewProps = NodeViewProps & {
   artifacts: Artifact[];
@@ -691,11 +698,46 @@ export function InlineMathNodeView(props: NodeViewProps) {
 
 export function HtmlNodeView(props: NodeViewProps) {
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogTitleId = useId();
   const html = String(props.node.attrs.html ?? "");
+  const { copyState, copy } = useCopyFeedback(html);
 
   useEffect(() => {
     if (!props.selected) setEditing(false);
   }, [props.selected]);
+
+  useEffect(() => {
+    if (editing) return;
+    setPreviewReady(false);
+  }, [editing, html]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setExpanded(false);
+    };
+    window.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape, true);
+      document.body.style.overflow = previousOverflow;
+      (expandButtonRef.current ?? previousFocus)?.focus();
+    };
+  }, [expanded]);
+
+  function openExpandedEditor() {
+    setEditing(true);
+    setExpanded(true);
+  }
+
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
@@ -705,16 +747,76 @@ export function HtmlNodeView(props: NodeViewProps) {
         resizeBounds={{ minWidth: 280, minHeight: 180, maxWidth: 1280, maxHeight: 960 }}
       >
         <section className={styles.documentHtmlNode}>
-          <PreviewToggle editing={editing} onToggle={() => setEditing((value) => !value)} />
+          <RenderNodeToolbar
+            kind="HTML"
+            editing={editing}
+            copyState={copyState}
+            expandButtonRef={expandButtonRef}
+            onModeChange={setEditing}
+            onCopy={() => void copy()}
+            onReset={() => props.updateAttributes({ html: defaultHtmlSource })}
+            onExpand={openExpandedEditor}
+          />
           {editing ? (
-            <textarea value={html} onChange={(event) => props.updateAttributes({ html: event.target.value })} />
-          ) : (
-            <div className={styles.htmlViewport}>
-              <iframe srcDoc={html} title="Custom HTML" sandbox="allow-scripts allow-forms allow-popups" />
+            <div className={styles.htmlNodeSource} contentEditable={false}>
+              <Suspense fallback={<div className={styles.renderNodeLoading}>Loading editor...</div>}>
+                <HtmlSourceEditor
+                  value={html}
+                  ariaLabel="HTML source"
+                  onChange={(value) => props.updateAttributes({ html: value })}
+                />
+              </Suspense>
             </div>
+          ) : (
+            html.trim() ? (
+              <div className={styles.htmlViewport} data-ready={previewReady ? "true" : "false"}>
+                {!previewReady && <div className={styles.htmlPreviewLoading}>Loading preview...</div>}
+                <iframe
+                  key={html}
+                  srcDoc={buildHtmlPreviewDocument(html)}
+                  title="HTML preview"
+                  referrerPolicy="no-referrer"
+                  sandbox="allow-scripts allow-forms"
+                  onLoad={() => setPreviewReady(true)}
+                />
+              </div>
+            ) : (
+              <div className={styles.emptyBlock}>Empty HTML</div>
+            )
           )}
         </section>
       </DirectManipulationLayer>
+      {expanded && createPortal(
+        <div className={styles.htmlEditorBackdrop} contentEditable={false}>
+          <div className={styles.htmlEditorDialog} role="dialog" aria-modal="true" aria-labelledby={dialogTitleId}>
+            <header className={styles.htmlEditorHeader}>
+              <span>
+                <Code2 size={16} />
+                <strong id={dialogTitleId}>HTML source</strong>
+                <small>Local sandbox</small>
+              </span>
+              <button type="button" aria-label="Close full screen HTML editor" title="Close" onClick={() => setExpanded(false)}>
+                <X size={17} />
+              </button>
+            </header>
+            <div className={styles.htmlEditorSurface}>
+              <Suspense fallback={<div className={styles.renderNodeLoading}>Loading editor...</div>}>
+                <HtmlSourceEditor
+                  value={html}
+                  ariaLabel="Full screen HTML source"
+                  autoFocus
+                  onChange={(value) => props.updateAttributes({ html: value })}
+                />
+              </Suspense>
+            </div>
+            <footer className={styles.htmlEditorFooter}>
+              <span>{html.split("\n").length} lines · {html.length.toLocaleString()} characters</span>
+              <button type="button" onClick={() => setExpanded(false)}>Done</button>
+            </footer>
+          </div>
+        </div>,
+        document.body,
+      )}
     </NodeViewWrapper>
   );
 }
@@ -865,6 +967,8 @@ function RenderNodeToolbar({
   onModeChange,
   onCopy,
   onReset,
+  onExpand,
+  expandButtonRef,
 }: {
   kind: string;
   editing: boolean;
@@ -872,6 +976,8 @@ function RenderNodeToolbar({
   onModeChange(editing: boolean): void;
   onCopy(): void;
   onReset(): void;
+  onExpand?(): void;
+  expandButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const copyLabel = copyState === "copied" ? `${kind} source copied` : copyState === "error" ? `Copy ${kind} source failed` : `Copy ${kind} source`;
   return (
@@ -888,6 +994,18 @@ function RenderNodeToolbar({
         </button>
       </div>
       <div className={styles.renderNodeActions}>
+        {onExpand && (
+          <button
+            ref={expandButtonRef}
+            type="button"
+            data-render-expand
+            aria-label={`Open full screen ${kind} editor`}
+            title="Open full screen editor"
+            onClick={onExpand}
+          >
+            <Maximize2 size={14} />
+          </button>
+        )}
         <button type="button" data-render-copy aria-label={copyLabel} title={copyLabel} onClick={onCopy}>
           {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
         </button>
@@ -907,14 +1025,6 @@ function RenderNodeError({ message }: { message: string }) {
     <div className={styles.renderNodeError} role="alert">
       <strong>Could not render</strong>
       <span>{message}</span>
-    </div>
-  );
-}
-
-function PreviewToggle({ editing, onToggle }: { editing: boolean; onToggle(): void }) {
-  return (
-    <div className={styles.previewToggle} contentEditable={false}>
-      <button onClick={onToggle}>{editing ? "Preview" : "Edit"}</button>
     </div>
   );
 }

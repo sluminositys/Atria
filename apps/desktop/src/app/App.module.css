@@ -3176,7 +3176,6 @@
 .nodeTool,
 .nodeToolActive,
 .inlineIconButton,
-.previewToggle button,
 .codeBlockHeader button {
   width: 24px;
   height: 24px;
@@ -3191,7 +3190,6 @@
 .nodeTool:hover,
 .nodeToolActive,
 .inlineIconButton:hover,
-.previewToggle button:hover,
 .codeBlockHeader button:hover {
   background: var(--atria-hover);
   color: #22252a;
@@ -3852,18 +3850,6 @@
   font-size: 13px;
 }
 
-.previewToggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 6px;
-}
-
-.previewToggle button {
-  width: auto;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
 .renderNodeToolbar {
   min-height: 34px;
   display: grid;
@@ -4078,6 +4064,163 @@
   font-family: var(--atria-mono);
   outline: none;
   resize: vertical;
+}
+
+.htmlNodeSource {
+  min-width: 0;
+  min-height: 150px;
+  flex: 1;
+  overflow: hidden;
+  border: 1px solid var(--atria-soft-line);
+  border-radius: 6px;
+  background: white;
+}
+
+.htmlNodeSource > div,
+.htmlNodeSource :global(.cm-editor) {
+  height: 100%;
+  min-height: 150px;
+}
+
+.htmlViewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.htmlViewport iframe {
+  transition: opacity 120ms ease;
+}
+
+.htmlViewport[data-ready="false"] iframe {
+  opacity: 0;
+}
+
+.htmlPreviewLoading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #fbfbfa;
+  color: var(--atria-muted);
+  font-size: 12px;
+}
+
+.htmlEditorBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgb(20 24 30 / 42%);
+  backdrop-filter: blur(2px);
+}
+
+.htmlEditorDialog {
+  width: min(1180px, 100%);
+  height: min(820px, 100%);
+  min-width: 0;
+  min-height: 360px;
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr) 40px;
+  overflow: hidden;
+  border: 1px solid #cfd3d8;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 28px 80px rgb(15 23 42 / 24%);
+}
+
+.htmlEditorHeader,
+.htmlEditorFooter {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: #fbfbfa;
+}
+
+.htmlEditorHeader {
+  border-bottom: 1px solid var(--atria-line);
+}
+
+.htmlEditorHeader > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.htmlEditorHeader strong {
+  color: var(--atria-ink);
+  font-size: 13px;
+}
+
+.htmlEditorHeader small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.htmlEditorHeader button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.htmlEditorHeader button:hover,
+.htmlEditorHeader button:focus-visible {
+  background: var(--atria-hover);
+  color: var(--atria-ink);
+  outline: none;
+}
+
+.htmlEditorSurface {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.htmlEditorSurface > div,
+.htmlEditorSurface :global(.cm-editor) {
+  height: 100%;
+}
+
+.htmlEditorFooter {
+  border-top: 1px solid var(--atria-line);
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.htmlEditorFooter button {
+  min-width: 62px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #2f6fba;
+  border-radius: 5px;
+  background: #2f80ed;
+  color: white;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .htmlEditorBackdrop {
+    padding: 10px;
+  }
+
+  .htmlEditorDialog {
+    min-height: 280px;
+  }
+
+  .htmlEditorHeader small {
+    display: none;
+  }
 }
 
 .documentMetricNode {

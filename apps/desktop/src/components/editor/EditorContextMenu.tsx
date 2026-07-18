@@ -20,6 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
+import { defaultHtmlSource } from "./htmlPreview";
 import styles from "../../app/App.module.css";
 
 export interface ContextMenuState {
@@ -221,7 +222,7 @@ function insertLatex(editor: Editor) {
 function insertHtml(editor: Editor) {
   insertBlockAtSelection(editor, {
     type: "atriaHtml",
-    attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" },
+    attrs: { html: defaultHtmlSource, width: 820, height: 320, layout: "wide", align: "center" },
   });
 }
 
