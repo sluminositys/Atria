@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Excalidraw, convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import type { AppState, BinaryFiles, ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
+import type { AppState, BinaryFiles, ExcalidrawImperativeAPI, ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
 import type { StoredExcalidrawScene } from "./DrawingNodeView";
 
@@ -13,6 +13,18 @@ interface ExcalidrawCanvasProps {
 
 export default function ExcalidrawCanvas({ scene, editing, onSceneChange }: ExcalidrawCanvasProps) {
   const initialData = useMemo(() => readInitialData(scene), []);
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || editing) return;
+    const next = readInitialData(scene);
+    api.updateScene({
+      elements: next.elements,
+      appState: next.appState ? { ...api.getAppState(), ...next.appState } : undefined,
+    });
+    if (next.files) api.addFiles(Object.values(next.files));
+  }, [editing, scene]);
 
   function handleChange(
     elements: readonly OrderedExcalidrawElement[],
@@ -30,6 +42,7 @@ export default function ExcalidrawCanvas({ scene, editing, onSceneChange }: Exca
 
   return (
     <Excalidraw
+      excalidrawAPI={(api) => { apiRef.current = api; }}
       initialData={initialData}
       viewModeEnabled={!editing}
       autoFocus={editing}
@@ -38,8 +51,8 @@ export default function ExcalidrawCanvas({ scene, editing, onSceneChange }: Exca
       gridModeEnabled={Boolean(initialData.appState?.gridModeEnabled)}
       UIOptions={{
         canvasActions: {
-          loadScene: false,
-          saveToActiveFile: false,
+          loadScene: true,
+          saveToActiveFile: true,
           changeViewBackgroundColor: true,
           clearCanvas: true,
           export: { saveFileToDisk: true },
@@ -53,7 +66,7 @@ export default function ExcalidrawCanvas({ scene, editing, onSceneChange }: Exca
   );
 }
 
-function readInitialData(scene: unknown): ExcalidrawInitialDataState {
+export function readInitialData(scene: unknown): ExcalidrawInitialDataState {
   if (isStoredScene(scene)) {
     return {
       elements: scene.elements as OrderedExcalidrawElement[],
