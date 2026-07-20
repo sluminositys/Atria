@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   CheckSquare,
+  Clock3,
   Code2,
   FileCode2,
   FileText,
@@ -68,6 +69,7 @@ const blockPalette: Array<{
   { type: "custom-html", label: "HTML", icon: Code2 },
   { type: "drawing", label: "Drawing", icon: PenTool },
   { type: "metric-card", label: "Metric", icon: Gauge },
+  { type: "timeline", label: "Timeline", icon: Clock3 },
 ];
 
 export function App() {

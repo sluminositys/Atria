@@ -1,8 +1,11 @@
-import { lazy, Suspense, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import {
   Check,
+  ArrowDown,
+  ArrowUp,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -14,10 +17,12 @@ import {
   Maximize2,
   Minus,
   Palette,
+  Plus,
   RefreshCcw,
   RotateCcw,
   TrendingDown,
   TrendingUp,
+  Trash2,
   WrapText,
   X,
 } from "lucide-react";
@@ -28,6 +33,7 @@ import { buildHtmlPreviewDocument, defaultHtmlSource } from "../htmlPreview";
 import { formatLatexError, formatMermaidError } from "../renderNodeErrors";
 import { DirectManipulationLayer } from "../interaction/DirectManipulationLayer";
 import { MathSourceInput } from "../MathSourceInput";
+import { createTimelineItem, moveTimelineItem, parseTimelineItems, type TimelineItem } from "../timelineItems";
 import styles from "../../../app/App.module.css";
 
 const HtmlSourceEditor = lazy(() =>
@@ -870,21 +876,93 @@ export function MetricNodeView(props: NodeViewProps) {
 }
 
 export function TimelineNodeView(props: NodeViewProps) {
-  const items = Array.isArray(props.node.attrs.items) ? props.node.attrs.items : [];
+  const rawItems = props.node.attrs.items;
+  const items = useMemo(() => parseTimelineItems(rawItems), [rawItems]);
+  const title = String(props.node.attrs.title ?? "Timeline");
+
+  useEffect(() => {
+    if (JSON.stringify(rawItems) !== JSON.stringify(items)) props.updateAttributes({ items });
+  }, [items, rawItems]);
+
+  function updateItems(next: TimelineItem[]) {
+    props.updateAttributes({ items: next });
+  }
+
+  function updateItem(id: string, patch: Partial<TimelineItem>) {
+    updateItems(items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function addItem() {
+    updateItems([...items, createTimelineItem({ at: "Date", title: "New event" })]);
+  }
+
   return (
     <NodeViewWrapper>
-      <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 300, maxWidth: 1120 }}>
-        <section className={styles.documentTimelineNode}>
+      <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 360, maxWidth: 1120 }}>
+        <section className={styles.documentTimelineNode} contentEditable={false}>
+          <header className={styles.timelineHeader}>
+            <CalendarDays size={16} aria-hidden="true" />
+            <CommitInput
+              className={styles.timelineTitleInput}
+              ariaLabel="Timeline title"
+              value={title}
+              fallback="Timeline"
+              placeholder="Timeline"
+              onCommit={(next) => props.updateAttributes({ title: next })}
+            />
+            <span>{items.length} {items.length === 1 ? "event" : "events"}</span>
+            <button type="button" aria-label="Add timeline event" title="Add event" onClick={addItem}>
+              <Plus size={15} />
+            </button>
+          </header>
           {items.length ? (
-            items.map((item: Record<string, unknown>, index: number) => (
-              <div key={index} className={styles.timelineItem}>
-                <time>{String(item.at ?? "")}</time>
-                <strong>{String(item.title ?? "")}</strong>
-                <p>{String(item.detail ?? "")}</p>
-              </div>
-            ))
+            <div className={styles.timelineList}>
+              {items.map((item, index) => (
+                <article key={item.id} className={styles.timelineItem}>
+                  <div className={styles.timelineRail} aria-hidden="true"><span /></div>
+                  <div className={styles.timelineItemContent}>
+                    <CommitInput
+                      className={styles.timelineDateInput}
+                      ariaLabel={`Event ${index + 1} date`}
+                      value={item.at}
+                      fallback="Date"
+                      placeholder="Date"
+                      onCommit={(at) => updateItem(item.id, { at })}
+                    />
+                    <CommitInput
+                      className={styles.timelineEventTitleInput}
+                      ariaLabel={`Event ${index + 1} title`}
+                      value={item.title}
+                      fallback="Untitled event"
+                      placeholder="Event title"
+                      onCommit={(eventTitle) => updateItem(item.id, { title: eventTitle })}
+                    />
+                    <CommitTextarea
+                      ariaLabel={`Event ${index + 1} details`}
+                      value={item.detail}
+                      placeholder="Add details"
+                      onCommit={(detail) => updateItem(item.id, { detail })}
+                    />
+                  </div>
+                  <div className={styles.timelineItemActions}>
+                    <button type="button" aria-label={`Move event ${index + 1} up`} title="Move up" disabled={index === 0} onClick={() => updateItems(moveTimelineItem(items, index, -1))}>
+                      <ArrowUp size={14} />
+                    </button>
+                    <button type="button" aria-label={`Move event ${index + 1} down`} title="Move down" disabled={index === items.length - 1} onClick={() => updateItems(moveTimelineItem(items, index, 1))}>
+                      <ArrowDown size={14} />
+                    </button>
+                    <button type="button" aria-label={`Delete event ${index + 1}`} title="Delete event" onClick={() => updateItems(items.filter((candidate) => candidate.id !== item.id))}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
           ) : (
-            <div className={styles.nodeError}>Empty timeline</div>
+            <button type="button" className={styles.timelineEmpty} onClick={addItem}>
+              <Plus size={16} />
+              <span>Add first event</span>
+            </button>
           )}
         </section>
       </DirectManipulationLayer>
@@ -1000,6 +1078,57 @@ function CommitInput({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelBlurRef.current = true;
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function CommitTextarea({
+  value,
+  placeholder,
+  ariaLabel,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  ariaLabel: string;
+  onCommit(value: string): void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const cancelBlurRef = useRef(false);
+  useEffect(() => setDraft(value), [value]);
+
+  function commit() {
+    const next = draft.trim();
+    setDraft(next);
+    if (next !== value) onCommit(next);
+  }
+
+  return (
+    <textarea
+      aria-label={ariaLabel}
+      value={draft}
+      rows={2}
+      placeholder={placeholder}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (cancelBlurRef.current) {
+          cancelBlurRef.current = false;
+          return;
+        }
+        commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
           commit();
           event.currentTarget.blur();

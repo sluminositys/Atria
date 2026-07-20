@@ -66,6 +66,7 @@ import { insertBlockAtSelection } from "./commands/selectionCommands";
 import { validateDocumentBodySource } from "./documentSource";
 import { imageFileValidationError, readImageFileAsDataUrl } from "./imageFiles";
 import { defaultHtmlSource } from "./htmlPreview";
+import { createTimelineItem, parseTimelineItems } from "./timelineItems";
 import styles from "../../app/App.module.css";
 
 const HtmlSourceEditor = lazy(() =>
@@ -601,7 +602,16 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           });
         return;
       case "timeline":
-        insertBlockAtSelection(current, { type: "atriaTimeline", attrs: { items: [], width: 760, layout: "wide", align: "left" } });
+        insertBlockAtSelection(current, {
+          type: "atriaTimeline",
+          attrs: {
+            title: "Timeline",
+            items: [createTimelineItem({ at: "Date", title: "New event" })],
+            width: 760,
+            layout: "wide",
+            align: "left",
+          },
+        });
         return;
       case "metric-card":
         insertBlockAtSelection(current, {
@@ -1195,7 +1205,12 @@ function createTimelineNode() {
     draggable: true,
     addAttributes() {
       return {
-        items: { default: [] },
+        title: { default: "Timeline" },
+        items: {
+          default: [],
+          parseHTML: (element: HTMLElement) => parseTimelineItems(element.getAttribute("data-items") ?? element.getAttribute("items")),
+          renderHTML: (attrs: Record<string, unknown>) => ({ "data-items": JSON.stringify(parseTimelineItems(attrs.items)) }),
+        },
         width: { default: 760 },
         height: { default: null },
         ...layoutAttributes,

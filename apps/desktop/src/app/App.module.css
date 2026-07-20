@@ -4387,32 +4387,204 @@
   box-shadow: inset 0 0 0 1px var(--atria-soft-line);
 }
 
-.timelineItem {
+.documentTimelineNode {
+  min-width: 0;
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 2px 10px;
-  padding: 8px 0;
+  gap: 10px;
+}
+
+.timelineHeader {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 28px;
+  gap: 7px;
+  align-items: center;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--atria-soft-line);
+  color: var(--atria-muted);
+}
+
+.timelineHeader > span {
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.timelineHeader button,
+.timelineItemActions button,
+.timelineEmpty {
+  border: 0;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.timelineHeader button,
+.timelineItemActions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+}
+
+.timelineHeader button:hover,
+.timelineHeader button:focus-visible,
+.timelineItemActions button:hover:not(:disabled),
+.timelineItemActions button:focus-visible {
+  background: var(--atria-hover);
+  color: var(--atria-ink);
+  outline: none;
+}
+
+.timelineTitleInput,
+.timelineDateInput,
+.timelineEventTitleInput,
+.timelineItemContent textarea {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--atria-text);
+  outline: none;
+}
+
+.timelineTitleInput {
+  height: 28px;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.timelineList {
+  min-width: 0;
+  display: grid;
+}
+
+.timelineItem {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 28px;
+  gap: 8px;
+  padding: 8px 0;
   text-align: left;
 }
 
-.timelineItem:last-child {
-  border-bottom: 0;
+.timelineRail {
+  position: relative;
+  display: flex;
+  justify-content: center;
 }
 
-.timelineItem time {
+.timelineRail::after {
+  position: absolute;
+  top: 17px;
+  bottom: -17px;
+  width: 1px;
+  background: #d8dde3;
+  content: "";
+}
+
+.timelineItem:last-child .timelineRail::after {
+  display: none;
+}
+
+.timelineRail span {
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-top: 8px;
+  border: 2px solid white;
+  border-radius: 999px;
+  background: #5a8f8f;
+  box-shadow: 0 0 0 1px #8fb7b7;
+}
+
+.timelineItemContent {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(74px, 0.3fr) minmax(120px, 1fr);
+  gap: 4px 8px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.timelineItem:hover .timelineItemContent,
+.timelineItem:focus-within .timelineItemContent {
+  border-color: var(--atria-soft-line);
+  background: rgb(255 255 255 / 72%);
+}
+
+.timelineDateInput {
+  height: 25px;
   color: var(--atria-muted);
   font-size: 12px;
 }
 
-.timelineItem strong {
-  color: #272522;
+.timelineEventTitleInput {
+  height: 25px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.timelineItem p {
-  grid-column: 2;
-  margin: 0;
+.timelineItemContent textarea {
+  min-height: 42px;
+  grid-column: 1 / -1;
+  padding: 3px 0;
   color: var(--atria-muted);
+  field-sizing: content;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  resize: none;
+}
+
+.timelineItemActions {
+  display: grid;
+  align-content: start;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.timelineItem:hover .timelineItemActions,
+.timelineItem:focus-within .timelineItemActions {
+  opacity: 1;
+}
+
+.timelineItemActions button:disabled {
+  opacity: 0.28;
+}
+
+.timelineEmpty {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px dashed var(--atria-line);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.timelineEmpty:hover,
+.timelineEmpty:focus-visible {
+  border-color: #a9bfd8;
+  background: var(--atria-hover);
+  color: var(--atria-ink);
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .timelineHeader {
+    grid-template-columns: 18px minmax(0, 1fr) 28px;
+  }
+
+  .timelineHeader > span {
+    display: none;
+  }
+
+  .timelineItemActions {
+    opacity: 1;
+  }
 }
 
 .documentLegacyNode {
