@@ -943,7 +943,7 @@ export function HtmlNodeView(props: NodeViewProps) {
               </Suspense>
             </div>
             <footer className={styles.htmlEditorFooter}>
-              <span>{html.split("\n").length} lines · {html.length.toLocaleString()} characters</span>
+              <span>{html.split("\n").length} lines / {html.length.toLocaleString()} characters</span>
               <button type="button" onClick={() => setExpanded(false)}>Done</button>
             </footer>
           </div>
