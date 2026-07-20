@@ -4333,24 +4333,58 @@
 }
 
 .documentMetricNode {
-  display: inline-grid;
-  min-width: 180px;
-  gap: 3px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 14px 16px;
+  background: #fbfbfa;
 }
 
-.documentMetricNode span,
-.documentMetricNode strong,
-.documentMetricNode small {
-  outline: none;
+.metricLabelInput {
+  height: 24px;
+  color: var(--atria-muted);
+  font-size: 12px;
+  font-weight: 650;
 }
 
-.documentMetricNode strong {
+.metricValueInput {
+  min-width: 0;
+  height: 42px;
   color: #1f2937;
-  font-size: 28px;
+  font-size: 30px;
+  font-weight: 720;
+  line-height: 1.15;
 }
 
-.documentMetricNode small {
+.metricDeltaRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
   color: var(--atria-green);
+}
+
+.metricDeltaInput {
+  min-width: 0;
+  height: 24px;
+  color: inherit;
+  font-size: 12px;
+}
+
+.documentMetricNode[data-trend="down"] .metricDeltaRow {
+  color: #b54842;
+}
+
+.documentMetricNode[data-trend="neutral"] .metricDeltaRow {
+  color: var(--atria-muted);
+}
+
+.documentMetricNode input:hover,
+.documentMetricNode input:focus-visible {
+  background: rgb(255 255 255 / 78%);
+  box-shadow: inset 0 0 0 1px var(--atria-soft-line);
 }
 
 .timelineItem {

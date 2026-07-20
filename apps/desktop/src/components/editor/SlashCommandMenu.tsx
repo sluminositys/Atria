@@ -6,6 +6,7 @@ import {
   PenTool,
   FileCode2,
   FileText,
+  Gauge,
   Hash,
   Image,
   PanelTop,
@@ -32,7 +33,8 @@ export type SlashCommand =
   | "inline-math"
   | "latex"
   | "html"
-  | "drawing";
+  | "drawing"
+  | "metric-card";
 
 export interface SlashMenuState {
   x: number;
@@ -69,6 +71,7 @@ const commands: Array<{
   { command: "latex", label: "Display formula", group: "Media", icon: Sigma },
   { command: "html", label: "Custom HTML", group: "Media", icon: Code2 },
   { command: "drawing", label: "Drawing", group: "Media", icon: PenTool },
+  { command: "metric-card", label: "Metric", group: "AI Workspace", icon: Gauge },
 ];
 
 export function slashCommandCount(query = ""): number {

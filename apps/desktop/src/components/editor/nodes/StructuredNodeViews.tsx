@@ -12,9 +12,12 @@ import {
   ImageUp,
   ListOrdered,
   Maximize2,
+  Minus,
   Palette,
   RefreshCcw,
   RotateCcw,
+  TrendingDown,
+  TrendingUp,
   WrapText,
   X,
 } from "lucide-react";
@@ -822,25 +825,44 @@ export function HtmlNodeView(props: NodeViewProps) {
 }
 
 export function MetricNodeView(props: NodeViewProps) {
+  const label = String(props.node.attrs.label ?? "Metric");
+  const value = String(props.node.attrs.value ?? "0");
+  const delta = String(props.node.attrs.delta ?? "");
+  const trend = delta.trim().startsWith("-") ? "down" : delta.trim().startsWith("+") ? "up" : "neutral";
+  const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
+
   return (
     <NodeViewWrapper>
-      <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 180, maxWidth: 520 }}>
-        <section className={styles.documentMetricNode}>
-          <EditableInline value={String(props.node.attrs.label ?? "Metric")} onCommit={(value) => props.updateAttributes({ label: value || "Metric" })} />
-          <strong
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={(event) => props.updateAttributes({ value: event.currentTarget.textContent?.trim() ?? "0" })}
-          >
-            {String(props.node.attrs.value ?? "") || "0"}
-          </strong>
-          <small
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={(event) => props.updateAttributes({ delta: event.currentTarget.textContent?.trim() ?? "" })}
-          >
-            {String(props.node.attrs.delta ?? "")}
-          </small>
+      <DirectManipulationLayer {...props} className={styles.nodeBlockObject} resizeMode="width" resizeBounds={{ minWidth: 220, maxWidth: 520 }}>
+        <section className={styles.documentMetricNode} data-trend={trend} contentEditable={false}>
+          <CommitInput
+            className={styles.metricLabelInput}
+            ariaLabel="Metric label"
+            value={label}
+            fallback="Metric"
+            placeholder="Metric label"
+            onCommit={(next) => props.updateAttributes({ label: next })}
+          />
+          <CommitInput
+            className={styles.metricValueInput}
+            ariaLabel="Metric value"
+            value={value}
+            fallback="0"
+            placeholder="0"
+            onCommit={(next) => props.updateAttributes({ value: next })}
+          />
+          <div className={styles.metricDeltaRow}>
+            <TrendIcon size={14} aria-hidden="true" />
+            <CommitInput
+              className={styles.metricDeltaInput}
+              ariaLabel="Metric change"
+              value={delta}
+              fallback=""
+              placeholder="No change"
+              onCommit={(next) => props.updateAttributes({ delta: next })}
+            />
+            <span className={styles.visuallyHidden}>{trend === "up" ? "Positive change" : trend === "down" ? "Negative change" : "No trend"}</span>
+          </div>
         </section>
       </DirectManipulationLayer>
     </NodeViewWrapper>
@@ -934,6 +956,61 @@ function EditableInline({ value, onCommit }: { value: string; onCommit(value: st
     >
       {value}
     </span>
+  );
+}
+
+function CommitInput({
+  value,
+  fallback,
+  placeholder,
+  ariaLabel,
+  className,
+  onCommit,
+}: {
+  value: string;
+  fallback: string;
+  placeholder: string;
+  ariaLabel: string;
+  className?: string;
+  onCommit(value: string): void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const cancelBlurRef = useRef(false);
+  useEffect(() => setDraft(value), [value]);
+
+  function commit() {
+    const next = draft.trim() || fallback;
+    setDraft(next);
+    if (next !== value) onCommit(next);
+  }
+
+  return (
+    <input
+      className={className}
+      aria-label={ariaLabel}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (cancelBlurRef.current) {
+          cancelBlurRef.current = false;
+          return;
+        }
+        commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelBlurRef.current = true;
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
   );
 }
 

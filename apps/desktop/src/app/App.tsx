@@ -24,6 +24,7 @@ import {
   Table2,
   Tags,
   FolderOpen,
+  Gauge,
   X,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
@@ -66,6 +67,7 @@ const blockPalette: Array<{
   { type: "latex", label: "LaTeX", icon: Sigma },
   { type: "custom-html", label: "HTML", icon: Code2 },
   { type: "drawing", label: "Drawing", icon: PenTool },
+  { type: "metric-card", label: "Metric", icon: Gauge },
 ];
 
 export function App() {
