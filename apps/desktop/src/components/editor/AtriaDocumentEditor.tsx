@@ -989,6 +989,7 @@ function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot)
         artifactId: { default: "" },
         width: { default: 820 },
         height: { default: 420 },
+        expandedHeight: { default: 420 },
         collapsed: { default: false },
         note: { default: "" },
         ...layoutAttributes,

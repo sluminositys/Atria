@@ -12,13 +12,16 @@ import {
   Code2,
   Eye,
   ExternalLink,
+  FileCode2,
   ImageUp,
   ListOrdered,
   Maximize2,
+  LoaderCircle,
   Minus,
   Palette,
   Plus,
   RefreshCcw,
+  Replace,
   RotateCcw,
   TrendingDown,
   TrendingUp,
@@ -27,7 +30,13 @@ import {
   X,
 } from "lucide-react";
 import type { Artifact, WorkspaceSnapshot } from "@atria/schema";
-import { importImageDataUrl, toWorkspaceFileAssetUrl } from "../../../app/workspaceClient";
+import {
+  importImageDataUrl,
+  openWorkspaceFile,
+  readWorkspaceTextFile,
+  toWorkspaceFileAssetUrl,
+} from "../../../app/workspaceClient";
+import { ArtifactPicker } from "../ArtifactPicker";
 import { imageFileValidationError, readImageFileAsDataUrl } from "../imageFiles";
 import { buildHtmlPreviewDocument, defaultHtmlSource } from "../htmlPreview";
 import { formatLatexError, formatMermaidError } from "../renderNodeErrors";
@@ -363,15 +372,88 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
   const artifact = props.artifacts.find((item) => item.id === artifactId);
   const collapsed = Boolean(props.node.attrs.collapsed);
   const note = String(props.node.attrs.note ?? "");
+  const rootPath = props.snapshot?.settings.workspacePath ?? "";
+  const relativePath = artifact?.filePath ?? "";
   const src = toWorkspaceFileAssetUrl(props.snapshot, artifact?.entryUrl || artifact?.filePath);
   const [reloadKey, setReloadKey] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<"checking" | "loading" | "ready" | "error">("checking");
+  const [validatedPreviewKey, setValidatedPreviewKey] = useState("");
+  const [message, setMessage] = useState("");
+  const previewKey = artifact ? `${artifact.id}\n${relativePath}\n${reloadKey}` : "";
+  const previewValidated = Boolean(previewKey) && validatedPreviewKey === previewKey;
+
+  useEffect(() => {
+    let active = true;
+    setMessage("");
+    if (!artifact) {
+      setValidatedPreviewKey("");
+      setPreviewStatus("error");
+      setMessage("The referenced HTML result is not available in this Workspace.");
+      return () => { active = false; };
+    }
+    if (!rootPath || !relativePath || !src) {
+      setValidatedPreviewKey("");
+      setPreviewStatus("error");
+      setMessage("This HTML result is not attached to a local Workspace file.");
+      return () => { active = false; };
+    }
+    setValidatedPreviewKey("");
+    setPreviewStatus("checking");
+    void readWorkspaceTextFile(rootPath, relativePath)
+      .then(() => {
+        if (!active) return;
+        setValidatedPreviewKey(previewKey);
+        setPreviewStatus("loading");
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setPreviewStatus("error");
+        setMessage(reason instanceof Error ? reason.message : String(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, [artifact, previewKey, relativePath, rootPath, src]);
+
+  function toggleCollapsed() {
+    if (collapsed) {
+      props.updateAttributes({ collapsed: false, height: Number(props.node.attrs.expandedHeight ?? 420) || 420 });
+    } else {
+      props.updateAttributes({
+        collapsed: true,
+        expandedHeight: Number(props.node.attrs.height ?? 420) || 420,
+        height: null,
+      });
+    }
+  }
+
+  async function openArtifact() {
+    if (!rootPath || !relativePath) return;
+    setMessage("");
+    try {
+      await openWorkspaceFile(rootPath, relativePath);
+    } catch (reason: unknown) {
+      setMessage(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  function reloadArtifact() {
+    setPreviewStatus("checking");
+    setMessage("");
+    setReloadKey((value) => value + 1);
+  }
+
+  const artifactMeta = artifact
+    ? `${artifact.tags.slice(0, 2).join(" / ") || "HTML result"} / ${new Date(artifact.updatedAt).toLocaleDateString()}`
+    : "Missing HTML result";
 
   return (
     <NodeViewWrapper>
       <DirectManipulationLayer
         {...props}
         className={styles.nodeBlockObject}
-        resizeMode="both"
+        resizeMode={collapsed ? "width" : "both"}
         resizeBounds={{ minWidth: 320, minHeight: 220, maxWidth: 1280, maxHeight: 960 }}
       >
         <section className={styles.documentArtifactNode}>
@@ -379,34 +461,66 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
             <button
               className={styles.inlineIconButton}
               title={collapsed ? "Expand" : "Collapse"}
-              onClick={() => props.updateAttributes({ collapsed: !collapsed })}
+              aria-label={collapsed ? "Expand Artifact" : "Collapse Artifact"}
+              onClick={toggleCollapsed}
             >
               {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
             </button>
+            <FileCode2 size={15} aria-hidden="true" />
             <div>
               <strong>{artifact?.title ?? "Missing artifact"}</strong>
-              <small>{artifact?.filePath ?? "Select an artifact"}</small>
+              <small>{artifactMeta}</small>
             </div>
-            {src && (
-              <>
-                <button className={styles.inlineIconButton} title="Reload" onClick={() => setReloadKey((value) => value + 1)}>
-                  <RefreshCcw size={14} />
-                </button>
-                <button className={styles.inlineIconButton} title="Open" onClick={() => window.open(src)}>
-                  <ExternalLink size={14} />
-                </button>
-              </>
-            )}
+            <button className={styles.inlineIconButton} aria-label="Replace Artifact" title="Replace" onClick={() => setPickerOpen(true)}>
+              <Replace size={14} />
+            </button>
+            <button
+              className={styles.inlineIconButton}
+              aria-label="Reload Artifact"
+              title="Reload"
+              disabled={!artifact || !previewValidated || previewStatus === "checking" || previewStatus === "loading"}
+              onClick={reloadArtifact}
+            >
+              <RefreshCcw size={14} />
+            </button>
+            <button className={styles.inlineIconButton} aria-label="Open Artifact in default application" title="Open" disabled={!artifact || !relativePath} onClick={() => void openArtifact()}>
+              <ExternalLink size={14} />
+            </button>
           </div>
           {!collapsed && (
             <>
-              {artifact && src ? (
-                <div className={styles.artifactViewport}>
-                  <iframe key={reloadKey} src={src} title={artifact.title} sandbox="allow-scripts allow-forms allow-popups" />
+              {artifact && src && previewValidated && (previewStatus === "loading" || previewStatus === "ready") ? (
+                <div className={styles.artifactViewport} data-loading={previewStatus === "loading" ? "true" : "false"}>
+                  {previewStatus === "loading" && <LoaderCircle className={`${styles.spin} ${styles.artifactNodeSpinner}`} size={18} />}
+                  <iframe
+                    key={reloadKey}
+                    src={src}
+                    title={`${artifact.title} embedded preview`}
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-scripts allow-forms allow-downloads"
+                    onLoad={() => setPreviewStatus("ready")}
+                    onError={() => {
+                      setPreviewStatus("error");
+                      setMessage("The local HTML result could not be loaded.");
+                    }}
+                  />
+                </div>
+              ) : previewStatus === "checking" || (previewStatus !== "error" && artifact && src && !previewValidated) ? (
+                <div className={styles.artifactNodeChecking} role="status" contentEditable={false}>
+                  <LoaderCircle className={styles.spin} size={18} />
+                  <span>Checking local HTML result...</span>
                 </div>
               ) : (
-                <div className={styles.nodeError}>Current workspace has no matching artifact</div>
+                <div className={styles.artifactNodeError} role="alert" contentEditable={false}>
+                  <strong>Preview unavailable</strong>
+                  <span>{message || "Choose another HTML result."}</span>
+                  <div>
+                    {artifact && <button type="button" onClick={reloadArtifact}><RefreshCcw size={14} />Retry</button>}
+                    <button type="button" onClick={() => setPickerOpen(true)}><Replace size={14} />Choose Artifact</button>
+                  </div>
+                </div>
               )}
+              {message && previewStatus !== "error" && <div className={styles.artifactNodeMessage} role="alert">{message}</div>}
               {(note || props.selected) && (
                 <div
                   className={styles.artifactCaption}
@@ -422,6 +536,16 @@ export function ArtifactNodeView(props: ArtifactNodeViewProps) {
           )}
         </section>
       </DirectManipulationLayer>
+      <ArtifactPicker
+        artifacts={props.artifacts}
+        open={pickerOpen}
+        title="Replace Artifact"
+        onClose={() => setPickerOpen(false)}
+        onSelect={(nextArtifact) => {
+          props.updateAttributes({ artifactId: nextArtifact.id, collapsed: false });
+          setReloadKey((value) => value + 1);
+        }}
+      />
     </NodeViewWrapper>
   );
 }

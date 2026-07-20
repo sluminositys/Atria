@@ -3622,7 +3622,7 @@
 
 .artifactNodeHeader {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 26px 26px;
+  grid-template-columns: 26px 18px minmax(0, 1fr) repeat(3, 26px);
   gap: 7px;
   align-items: center;
   margin-bottom: 8px;
@@ -3657,6 +3657,22 @@
   min-height: 180px;
 }
 
+.artifactViewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.artifactViewport[data-loading="true"] iframe {
+  opacity: 0;
+}
+
+.artifactNodeSpinner {
+  position: absolute;
+  top: calc(50% - 9px);
+  left: calc(50% - 9px);
+  color: var(--atria-muted);
+}
+
 .artifactViewport iframe,
 .htmlViewport iframe {
   width: 100%;
@@ -3669,6 +3685,73 @@
 .artifactCaption {
   margin-top: 7px;
   text-align: center;
+}
+
+.artifactNodeError {
+  min-height: 150px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 20px;
+  border: 1px dashed #d7c1bf;
+  border-radius: 7px;
+  background: #fffafa;
+  color: var(--atria-muted);
+  text-align: center;
+}
+
+.artifactNodeChecking {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--atria-line);
+  border-radius: 7px;
+  background: #fafafa;
+  color: var(--atria-muted);
+  font-size: 12px;
+}
+
+.artifactNodeError strong {
+  color: #6f3531;
+  font-size: 13px;
+}
+
+.artifactNodeError span {
+  max-width: 440px;
+  font-size: 12px;
+}
+
+.artifactNodeError > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.artifactNodeError button {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--atria-line);
+  border-radius: 5px;
+  background: white;
+  color: var(--atria-text);
+  font-size: 11px;
+}
+
+.artifactNodeMessage {
+  margin-top: 7px;
+  padding: 7px 9px;
+  border: 1px solid #e8bbb8;
+  border-radius: 6px;
+  background: #fff4f3;
+  color: #8f3732;
+  font-size: 12px;
 }
 
 .nodeError {
@@ -5240,8 +5323,10 @@
   text-align: left;
 }
 
-.pickerList button:hover {
+.pickerList button:hover,
+.pickerList button:focus-visible {
   background: var(--atria-active);
+  outline: none;
 }
 
 .pickerList span {
