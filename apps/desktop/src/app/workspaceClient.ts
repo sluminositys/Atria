@@ -101,6 +101,13 @@ export async function readWorkspaceTextFile(rootPath: string, relativePath: stri
   return invoke<string>("atria_read_text_file", { rootPath, relativePath });
 }
 
+export async function getWorkspaceFileMetadata(
+  rootPath: string,
+  relativePath: string,
+): Promise<LocalWorkspaceEntry> {
+  return invoke<LocalWorkspaceEntry>("atria_workspace_file_metadata", { rootPath, relativePath });
+}
+
 export async function writeWorkspaceTextFile(
   rootPath: string,
   relativePath: string,

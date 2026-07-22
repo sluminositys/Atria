@@ -279,6 +279,35 @@ fn atria_read_text_file(root_path: Option<String>, relative_path: String) -> Res
 }
 
 #[tauri::command]
+fn atria_workspace_file_metadata(
+  root_path: Option<String>,
+  relative_path: String,
+) -> Result<WorkspaceEntry, String> {
+  let root = resolve_root(root_path)?;
+  let path = safe_join(&root, &relative_path)?;
+  let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+  if !metadata.is_file() {
+    return Err(format!("Workspace file does not exist: {relative_path}"));
+  }
+  let name = path
+    .file_name()
+    .map(|value| value.to_string_lossy().into_owned())
+    .ok_or_else(|| format!("Workspace file does not exist: {relative_path}"))?;
+  Ok(WorkspaceEntry {
+    name,
+    relative_path: relative_slash(&root, &path)?,
+    absolute_path: path.to_string_lossy().into_owned(),
+    kind: "file".to_string(),
+    size: metadata.len(),
+    modified_ms: metadata
+      .modified()
+      .ok()
+      .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+      .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64),
+  })
+}
+
+#[tauri::command]
 fn atria_read_text_prefix(
   root_path: Option<String>,
   relative_path: String,
@@ -402,6 +431,7 @@ fn main() {
       atria_read_text_prefix,
       atria_write_workspace_snapshot,
       atria_read_text_file,
+      atria_workspace_file_metadata,
       atria_write_text_file,
       atria_create_directory,
       atria_move_path,
@@ -422,7 +452,10 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-  use super::{atria_move_path, atria_open_workspace_file, is_searchable_document, search_snippet};
+  use super::{
+    atria_move_path, atria_open_workspace_file, atria_workspace_file_metadata,
+    is_searchable_document, search_snippet,
+  };
   use std::fs;
 
   #[test]
@@ -467,6 +500,25 @@ mod tests {
     .unwrap_err();
 
     assert!(error.contains("does not exist"));
+    fs::remove_dir_all(root).unwrap();
+  }
+
+  #[test]
+  fn reads_metadata_for_a_real_workspace_file() {
+    let root = std::env::temp_dir().join(format!("atria-metadata-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("Assets")).unwrap();
+    fs::write(root.join("Assets").join("sample.bin"), [1_u8, 2, 3, 4]).unwrap();
+
+    let entry = atria_workspace_file_metadata(
+      Some(root.to_string_lossy().into_owned()),
+      "Assets/sample.bin".to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(entry.relative_path, "Assets/sample.bin");
+    assert_eq!(entry.size, 4);
+    assert_eq!(entry.kind, "file");
+    assert!(entry.modified_ms.is_some());
     fs::remove_dir_all(root).unwrap();
   }
 }
