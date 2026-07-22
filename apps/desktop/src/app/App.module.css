@@ -420,14 +420,15 @@
 .tabLabel {
   min-width: 0;
   height: 100%;
-  display: grid;
-  align-content: center;
-  gap: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 8px 0 14px;
   text-align: left;
 }
 
 .tabLabel span {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--atria-ink);
@@ -435,6 +436,15 @@
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tabDirtyIndicator {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #2f80ed;
+  box-shadow: 0 0 0 2px white;
 }
 
 .tabLabel small {

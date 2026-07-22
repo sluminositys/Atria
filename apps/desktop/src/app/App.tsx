@@ -199,8 +199,16 @@ export function App() {
             >
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
                 <span>{tab.title}</span>
+                {tab.dirty && (
+                  <i
+                    className={styles.tabDirtyIndicator}
+                    data-dirty="true"
+                    aria-label="Unsaved changes"
+                    title="Unsaved changes"
+                  />
+                )}
               </button>
-              <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
+              <button className={styles.tabClose} onClick={() => closeTab(tab.key)} aria-label={`Close ${tab.title}`} title="Close">
                 <X size={14} />
               </button>
             </div>

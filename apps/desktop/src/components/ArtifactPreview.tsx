@@ -21,6 +21,8 @@ import {
   toWorkspaceFileAssetUrl,
   writeWorkspaceTextFile,
 } from "../app/workspaceClient";
+import { useAtriaStore } from "../app/store";
+import { isSourceDraftDirty } from "../app/sourceDrafts";
 import { buildArtifactPreviewDocument } from "./artifactPreviewDocument";
 import styles from "../app/App.module.css";
 
@@ -39,9 +41,11 @@ type ArtifactStatus = "loading" | "ready" | "saving" | "saved" | "error" | "conf
 export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
   const rootPath = snapshot?.settings.workspacePath ?? "";
   const relativePath = artifact.filePath ?? "";
+  const tabKey = `artifact:${artifact.id}`;
+  const draft = useAtriaStore((state) => state.sourceDrafts[tabKey]);
+  const setSourceDraft = useAtriaStore((state) => state.setSourceDraft);
+  const saveDraft = useAtriaStore((state) => state.saveSourceDraft);
   const [mode, setMode] = useState<ArtifactMode>("preview");
-  const [source, setSource] = useState("");
-  const [baselineSource, setBaselineSource] = useState("");
   const [status, setStatus] = useState<ArtifactStatus>("loading");
   const [message, setMessage] = useState("");
   const [fileAvailable, setFileAvailable] = useState(false);
@@ -55,10 +59,11 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
   const fullScreenButtonRef = useRef<HTMLButtonElement | null>(null);
   const fullScreenCloseRef = useRef<HTMLButtonElement | null>(null);
   const fullScreenTitleId = useId();
-  const dirty = source !== baselineSource;
+  const source = draft?.source ?? "";
+  const dirty = isSourceDraftDirty(draft);
   const previewAvailable = fileAvailable && Boolean(previewDocument) && status !== "loading";
 
-  const loadSource = useCallback(async () => {
+  const loadSource = useCallback(async (discardDraft = false) => {
     const sequence = ++loadSequenceRef.current;
     if (!rootPath || !relativePath) {
       setFileAvailable(false);
@@ -79,12 +84,29 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
         toUrl: (path) => toWorkspaceFileAssetUrl(snapshot, path),
       });
       if (sequence !== loadSequenceRef.current) return false;
-      setSource(next);
-      setBaselineSource(next);
+      const existingDraft = useAtriaStore.getState().sourceDrafts[tabKey];
+      if (!discardDraft && isSourceDraftDirty(existingDraft)) {
+        if (next !== existingDraft!.baselineSource) {
+          setStatus("conflict");
+          setMessage("The file changed outside Atria. Load the disk version before applying your edits.");
+        } else {
+          setStatus("ready");
+        }
+      } else {
+        setSourceDraft({
+          key: tabKey,
+          type: "artifact",
+          id: artifact.id,
+          title: artifact.title,
+          filePath: relativePath,
+          source: next,
+          baselineSource: next,
+        });
+        setStatus("ready");
+      }
       setPreviewDocument(prepared.html);
       setResourceWarning(prepared.warnings.join(" "));
       setFileAvailable(true);
-      setStatus("ready");
       return true;
     } catch (reason) {
       if (sequence !== loadSequenceRef.current) return false;
@@ -93,7 +115,7 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
       setMessage(messageFor(reason));
       return false;
     }
-  }, [relativePath, rootPath, snapshot]);
+  }, [artifact.id, artifact.title, relativePath, rootPath, setSourceDraft, snapshot, tabKey]);
 
   useEffect(() => {
     setMode("preview");
@@ -127,7 +149,8 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
   }, [fullScreen]);
 
   function changeSource(nextSource: string) {
-    setSource(nextSource);
+    if (!draft) return;
+    setSourceDraft({ ...draft, source: nextSource });
     if (status === "saved" || status === "conflict" || status === "error") setStatus("ready");
     if (message) setMessage("");
   }
@@ -137,27 +160,17 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
     setStatus("saving");
     setMessage("");
     try {
-      let currentDiskSource: string | undefined;
-      try {
-        currentDiskSource = await readWorkspaceTextFile(rootPath, relativePath);
-      } catch (reason) {
-        if (!isMissingFile(reason)) throw reason;
-      }
-      if (currentDiskSource !== undefined && currentDiskSource !== baselineSource) {
-        setStatus("conflict");
-        setMessage("The file changed outside Atria. Reload it before applying your edits.");
+      const result = await saveDraft(tabKey);
+      if (result.status !== "saved") {
+        setStatus(result.status === "conflict" ? "conflict" : "error");
+        setFileAvailable(result.status !== "missing");
+        setMessage(result.message);
         return false;
       }
-      await writeWorkspaceTextFile(rootPath, relativePath, source);
-      await checkpointWorkspacePaths(rootPath, [relativePath], `Edit ${artifact.title}`, {
-        actorName: "Local user",
-        transactionId: crypto.randomUUID(),
-      });
-      const prepared = await buildArtifactPreviewDocument(source, relativePath, {
+      const prepared = await buildArtifactPreviewDocument(result.savedSource, relativePath, {
         readText: (path) => readWorkspaceTextFile(rootPath, path),
         toUrl: (path) => toWorkspaceFileAssetUrl(snapshot, path),
       });
-      setBaselineSource(source);
       setPreviewDocument(prepared.html);
       setResourceWarning(prepared.warnings.join(" "));
       setFileAvailable(true);
@@ -175,20 +188,20 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
   }
 
   async function restoreMissingFile() {
-    if (!rootPath || !relativePath || !source || status === "saving") return;
+    if (!rootPath || !relativePath || !draft?.source || status === "saving") return;
     setStatus("saving");
     setMessage("");
     try {
-      await writeWorkspaceTextFile(rootPath, relativePath, source);
+      await writeWorkspaceTextFile(rootPath, relativePath, draft.source);
       await checkpointWorkspacePaths(rootPath, [relativePath], `Restore ${artifact.title}`, {
         actorName: "Local user",
         transactionId: crypto.randomUUID(),
       });
-      const prepared = await buildArtifactPreviewDocument(source, relativePath, {
+      const prepared = await buildArtifactPreviewDocument(draft.source, relativePath, {
         readText: (path) => readWorkspaceTextFile(rootPath, path),
         toUrl: (path) => toWorkspaceFileAssetUrl(snapshot, path),
       });
-      setBaselineSource(source);
+      setSourceDraft({ ...draft, baselineSource: draft.source });
       setPreviewDocument(prepared.html);
       setResourceWarning(prepared.warnings.join(" "));
       setFileAvailable(true);
@@ -209,9 +222,9 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
     setMode(nextMode);
   }
 
-  async function reloadSource(force = false) {
-    if ((!force && dirty) || status === "saving") return;
-    const loaded = await loadSource();
+  async function reloadSource(options: { force?: boolean; discardDraft?: boolean } = {}) {
+    if ((!options.force && dirty) || status === "saving") return;
+    const loaded = await loadSource(Boolean(options.discardDraft));
     if (!loaded) return;
     setReloadKey((value) => value + 1);
   }
@@ -315,7 +328,7 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
         {message && !(mode === "preview" && !fileAvailable) && (
           <div className={status === "conflict" ? styles.artifactConflict : styles.artifactError} role="alert">
             <span>{message}</span>
-            <button type="button" onClick={() => void reloadSource(true)}>Reload</button>
+            <button type="button" onClick={() => void reloadSource({ force: true, discardDraft: true })}>Load disk version</button>
           </div>
         )}
         {resourceWarning && <div className={styles.artifactWarning} role="status">{resourceWarning}</div>}
@@ -331,7 +344,7 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
               message={message}
               canRestore={Boolean(source)}
               saving={status === "saving"}
-              onRetry={() => void reloadSource(true)}
+              onRetry={() => void reloadSource({ force: true })}
               onRestore={() => void restoreMissingFile()}
             />
           ) : mode === "preview" ? (
@@ -374,7 +387,7 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
                 <small>{metadata}</small>
               </span>
               <div>
-                <button type="button" aria-label="Reload full screen preview" title="Reload" disabled={status === "loading"} onClick={() => void reloadSource(true)}>
+                <button type="button" aria-label="Reload full screen preview" title="Reload" disabled={status === "loading"} onClick={() => void reloadSource({ force: true })}>
                   <RefreshCw size={16} />
                 </button>
                 <button type="button" aria-label="Open in default application" title="Open" disabled={!fileAvailable} onClick={() => void openArtifact()}>
@@ -393,7 +406,7 @@ export function ArtifactPreview({ artifact, snapshot }: ArtifactPreviewProps) {
                   message={message}
                   canRestore={Boolean(source)}
                   saving={status === "saving"}
-                  onRetry={() => void reloadSource(true)}
+                  onRetry={() => void reloadSource({ force: true })}
                   onRestore={() => void restoreMissingFile()}
                 />
               ) : (

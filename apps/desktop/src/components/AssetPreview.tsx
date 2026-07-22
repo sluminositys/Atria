@@ -26,6 +26,8 @@ import {
   writeWorkspaceTextFile,
 } from "../app/workspaceClient";
 import type { LocalWorkspaceEntry } from "../app/workspaceFiles";
+import { useAtriaStore } from "../app/store";
+import { isSourceDraftDirty } from "../app/sourceDrafts";
 import styles from "../app/App.module.css";
 
 const SourceEditor = lazy(() =>
@@ -37,8 +39,10 @@ type FullScreenKind = "image" | "pdf";
 
 export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snapshot: WorkspaceSnapshot }) {
   const rootPath = snapshot.settings.workspacePath;
-  const [source, setSource] = useState("");
-  const [baselineSource, setBaselineSource] = useState("");
+  const tabKey = `asset:${asset.id}`;
+  const draft = useAtriaStore((state) => state.sourceDrafts[tabKey]);
+  const setSourceDraft = useAtriaStore((state) => state.setSourceDraft);
+  const saveDraft = useAtriaStore((state) => state.saveSourceDraft);
   const [status, setStatus] = useState<AssetStatus>("loading");
   const [message, setMessage] = useState("");
   const [fileAvailable, setFileAvailable] = useState(false);
@@ -55,11 +59,12 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
   const fullScreenDialogRef = useRef<HTMLElement | null>(null);
   const fullScreenCloseRef = useRef<HTMLButtonElement | null>(null);
   const fullScreenTitleId = useId();
-  const dirty = asset.kind === "text" && source !== baselineSource;
+  const source = draft?.source ?? "";
+  const dirty = asset.kind === "text" && isSourceDraftDirty(draft);
   const fullScreenKind: FullScreenKind | null = asset.kind === "image" || asset.kind === "pdf" ? asset.kind : null;
   const assetUrl = withReloadKey(toWorkspaceFileAssetUrl(snapshot, asset.filePath), reloadKey);
 
-  const loadAsset = useCallback(async () => {
+  const loadAsset = useCallback(async (discardDraft = false) => {
     const sequence = ++loadSequenceRef.current;
     setStatus("loading");
     setMessage("");
@@ -73,11 +78,28 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
           getWorkspaceFileMetadata(rootPath, asset.filePath),
         ]);
         if (sequence !== loadSequenceRef.current) return false;
-        setSource(nextSource);
-        setBaselineSource(nextSource);
+        const existingDraft = useAtriaStore.getState().sourceDrafts[tabKey];
+        if (!discardDraft && isSourceDraftDirty(existingDraft)) {
+          if (nextSource !== existingDraft!.baselineSource) {
+            setStatus("conflict");
+            setMessage("This file changed outside Atria. Load the disk version before applying your edits.");
+          } else {
+            setStatus("ready");
+          }
+        } else {
+          setSourceDraft({
+            key: tabKey,
+            type: "asset",
+            id: asset.id,
+            title: asset.title,
+            filePath: asset.filePath,
+            source: nextSource,
+            baselineSource: nextSource,
+          });
+          setStatus("ready");
+        }
         setFileMetadata(metadata);
         setFileAvailable(true);
-        setStatus("ready");
         return true;
       }
 
@@ -97,11 +119,9 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
       setMessage(readErrorMessage(reason));
       return false;
     }
-  }, [asset.filePath, asset.kind, rootPath]);
+  }, [asset.filePath, asset.id, asset.kind, asset.title, rootPath, setSourceDraft, tabKey]);
 
   useEffect(() => {
-    setSource("");
-    setBaselineSource("");
     setFileMetadata(null);
     setReloadKey(0);
     setZoom(100);
@@ -153,7 +173,8 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
   }, [fullScreen]);
 
   function changeSource(nextSource: string) {
-    setSource(nextSource);
+    if (!draft) return;
+    setSourceDraft({ ...draft, source: nextSource });
     if (status === "saved" || status === "error" || status === "conflict") setStatus("ready");
     if (message) setMessage("");
   }
@@ -163,28 +184,14 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
     setStatus("saving");
     setMessage("");
     try {
-      let diskSource: string;
-      try {
-        diskSource = await readWorkspaceTextFile(rootPath, asset.filePath);
-      } catch (reason) {
-        if (!isMissingFile(reason)) throw reason;
-        setFileAvailable(false);
-        setStatus("error");
-        setMessage("This file was removed outside Atria. Restore it to keep your edits.");
+      const result = await saveDraft(tabKey);
+      if (result.status !== "saved") {
+        setStatus(result.status === "conflict" ? "conflict" : "error");
+        setFileAvailable(result.status !== "missing");
+        setMessage(result.message);
         return false;
       }
-      if (diskSource !== baselineSource) {
-        setStatus("conflict");
-        setMessage("This file changed outside Atria. Load the disk version before applying your edits.");
-        return false;
-      }
-      await writeWorkspaceTextFile(rootPath, asset.filePath, source);
-      await checkpointWorkspacePaths(rootPath, [asset.filePath], `Edit ${asset.title}`, {
-        actorName: "Local user",
-        transactionId: crypto.randomUUID(),
-      });
       const metadata = await getWorkspaceFileMetadata(rootPath, asset.filePath);
-      setBaselineSource(source);
       setFileMetadata(metadata);
       setFileAvailable(true);
       setStatus("saved");
@@ -198,17 +205,17 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
   }
 
   async function restoreTextFile() {
-    if (asset.kind !== "text" || !source || status === "saving") return;
+    if (asset.kind !== "text" || !draft?.source || status === "saving") return;
     setStatus("saving");
     setMessage("");
     try {
-      await writeWorkspaceTextFile(rootPath, asset.filePath, source);
+      await writeWorkspaceTextFile(rootPath, asset.filePath, draft.source);
       await checkpointWorkspacePaths(rootPath, [asset.filePath], `Restore ${asset.title}`, {
         actorName: "Local user",
         transactionId: crypto.randomUUID(),
       });
       const metadata = await getWorkspaceFileMetadata(rootPath, asset.filePath);
-      setBaselineSource(source);
+      setSourceDraft({ ...draft, baselineSource: draft.source });
       setFileMetadata(metadata);
       setFileAvailable(true);
       setStatus("saved");
@@ -231,10 +238,10 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
     }
   }
 
-  async function reloadAsset(force = false) {
-    if ((!force && dirty) || status === "saving") return;
+  async function reloadAsset(options: { force?: boolean; discardDraft?: boolean } = {}) {
+    if ((!options.force && dirty) || status === "saving") return;
     setNaturalSize({ width: 0, height: 0 });
-    await loadAsset();
+    await loadAsset(Boolean(options.discardDraft));
   }
 
   function openFullScreen() {
@@ -323,7 +330,7 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
           <div className={status === "conflict" ? styles.artifactConflict : styles.artifactError} role="alert">
             <span>{message}</span>
             {asset.kind === "text" && (
-              <button type="button" onClick={() => void reloadAsset(true)}>Load disk version</button>
+              <button type="button" onClick={() => void reloadAsset({ force: true, discardDraft: true })}>Load disk version</button>
             )}
           </div>
         )}
@@ -335,7 +342,7 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
               message={message}
               canRestore={asset.kind === "text" && Boolean(source)}
               saving={status === "saving"}
-              onRetry={() => void reloadAsset(true)}
+              onRetry={() => void reloadAsset({ force: true })}
               onRestore={() => void restoreTextFile()}
             />
           ) : asset.kind === "text" ? (
@@ -417,7 +424,7 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
                 {fullScreenKind === "image" && (
                   <ImageZoomControls zoom={zoom} fit={fitImage} disabled={!fileAvailable} onZoom={setZoom} onFit={setFitImage} compact />
                 )}
-                <button type="button" aria-label="Reload full screen preview" title="Reload" disabled={status === "loading"} onClick={() => void reloadAsset(true)}>
+                <button type="button" aria-label="Reload full screen preview" title="Reload" disabled={status === "loading"} onClick={() => void reloadAsset({ force: true })}>
                   <RefreshCw className={status === "loading" ? styles.spin : undefined} size={16} />
                 </button>
                 <button type="button" aria-label="Open in default application" title="Open" disabled={!fileAvailable} onClick={() => void openExternally()}>
@@ -434,7 +441,7 @@ export function AssetPreview({ asset, snapshot }: { asset: WorkspaceAsset; snaps
                   message={message}
                   canRestore={false}
                   saving={false}
-                  onRetry={() => void reloadAsset(true)}
+                  onRetry={() => void reloadAsset({ force: true })}
                   onRestore={() => undefined}
                 />
               ) : fullScreenKind === "image" ? (
