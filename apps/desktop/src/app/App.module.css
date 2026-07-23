@@ -374,6 +374,46 @@
 
 .treeDialog > footer button.treeDialogDanger:hover:not(:disabled) { background: #912018; }
 
+.unsavedDialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.unsavedFileSummary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #fafaf9;
+  color: var(--atria-muted);
+}
+
+.unsavedFileSummary > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.unsavedFileSummary strong,
+.unsavedFileSummary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unsavedFileSummary strong {
+  color: var(--atria-ink);
+  font-size: 13px;
+}
+
+.unsavedFileSummary small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
 .mainPane {
   min-width: 0;
   height: 100vh;

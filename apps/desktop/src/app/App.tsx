@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -36,6 +36,7 @@ import { FileTree } from "../components/FileTree";
 import { DocumentGraphPane } from "../components/DocumentGraphPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
+import { UnsavedChangesDialog } from "../components/UnsavedChangesDialog";
 import styles from "./App.module.css";
 
 const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
@@ -89,7 +90,23 @@ export function App() {
     saveStatus,
     saveError,
     retrySave,
+    saveSourceDraft,
   } = useAtriaStore();
+  const [pendingCloseKey, setPendingCloseKey] = useState("");
+  const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState("");
+
+  const requestCloseTab = useCallback((key: string) => {
+    const tab = useAtriaStore.getState().tabs.find((item) => item.key === key);
+    if (!tab) return;
+    if (!tab.dirty) {
+      closeTab(key);
+      return;
+    }
+    setCloseError("");
+    setCloseBusy(false);
+    setPendingCloseKey(key);
+  }, [closeTab]);
 
   useEffect(() => {
     if (query.data) setSnapshot(query.data);
@@ -100,7 +117,7 @@ export function App() {
       if (!event.ctrlKey || event.altKey || !tabs.length) return;
       if (event.key.toLowerCase() === "w") {
         event.preventDefault();
-        if (activeTabKey) closeTab(activeTabKey);
+        if (activeTabKey) requestCloseTab(activeTabKey);
         return;
       }
       if (event.key === "Tab") {
@@ -122,7 +139,7 @@ export function App() {
     }
     window.addEventListener("keydown", handleTabShortcuts);
     return () => window.removeEventListener("keydown", handleTabShortcuts);
-  }, [activeTabKey, closeTab, openNode, tabs]);
+  }, [activeTabKey, openNode, requestCloseTab, tabs]);
 
   const activeTab = getActiveTab({ activeTabKey, tabs });
   const activePage =
@@ -133,6 +150,7 @@ export function App() {
       : undefined;
   const activeAsset =
     activeTab?.type === "asset" ? snapshot?.assets.find((asset) => asset.id === activeTab.id) : undefined;
+  const pendingCloseTab = tabs.find((tab) => tab.key === pendingCloseKey);
   const historyTarget: HistoryTarget | undefined = activePage?.filePath
     ? {
         id: activePage.id,
@@ -194,7 +212,7 @@ export function App() {
               key={tab.key}
               className={tab.key === activeTabKey ? styles.tabActive : styles.tab}
               onAuxClick={(event) => {
-                if (event.button === 1) closeTab(tab.key);
+                if (event.button === 1) requestCloseTab(tab.key);
               }}
             >
               <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
@@ -208,7 +226,7 @@ export function App() {
                   />
                 )}
               </button>
-              <button className={styles.tabClose} onClick={() => closeTab(tab.key)} aria-label={`Close ${tab.title}`} title="Close">
+              <button className={styles.tabClose} onClick={() => requestCloseTab(tab.key)} aria-label={`Close ${tab.title}`} title="Close">
                 <X size={14} />
               </button>
             </div>
@@ -277,8 +295,44 @@ export function App() {
           })}
         </div>
       </aside>
+
+      {pendingCloseTab && (
+        <UnsavedChangesDialog
+          tab={pendingCloseTab}
+          busy={closeBusy}
+          error={closeError}
+          onCancel={() => {
+            if (closeBusy) return;
+            setPendingCloseKey("");
+            setCloseError("");
+          }}
+          onDiscard={() => {
+            if (closeBusy) return;
+            const key = pendingCloseTab.key;
+            setPendingCloseKey("");
+            setCloseError("");
+            closeTab(key);
+          }}
+          onSave={() => void saveAndClose(pendingCloseTab.key)}
+        />
+      )}
     </div>
   );
+
+  async function saveAndClose(key: string) {
+    if (closeBusy) return;
+    setCloseBusy(true);
+    setCloseError("");
+    const result = await saveSourceDraft(key);
+    if (result.status === "saved" && !useAtriaStore.getState().tabs.find((tab) => tab.key === key)?.dirty) {
+      setPendingCloseKey("");
+      setCloseBusy(false);
+      closeTab(key);
+      return;
+    }
+    setCloseBusy(false);
+    setCloseError(result.status === "saved" ? "The draft changed while it was being saved. Save it again to close." : result.message);
+  }
 
   function renderSidePane(current: WorkspaceSnapshot) {
     if (activeTool === "files") {
