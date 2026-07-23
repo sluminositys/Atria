@@ -27,6 +27,7 @@ import {
   type SourceDraft,
   type SourceDraftSaveResult,
 } from "./sourceDrafts";
+import { mutateWorkspaceTag, normalizeTagName } from "./tagMutations";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
 export type TabType = "page" | "artifact" | "asset" | "timeline";
@@ -79,6 +80,8 @@ interface AtriaState {
   renameNode(type: FileNodeType, id: string, name: string): Promise<void>;
   moveNode(type: FileNodeType, id: string, folderId: string | null): Promise<void>;
   updatePage(pageId: string, patch: Partial<Page>): void;
+  renameTag(currentTag: string, nextTag: string): Promise<void>;
+  deleteTag(tag: string): Promise<void>;
   deleteNode(type: FileNodeType, id: string): Promise<void>;
   addBlock(type: AtriaBlockType, options?: AddBlockOptions): void;
   addImageFromDataUrl(dataUrl: string, pageId?: string, afterBlockId?: string): Promise<void>;
@@ -935,6 +938,51 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         ),
       };
     });
+  },
+
+  async renameTag(currentTag, nextTag) {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const normalized = normalizeTagName(nextTag);
+    if (!normalized) throw new Error("Enter a tag name.");
+    const mutation = mutateWorkspaceTag(snapshot, currentTag, normalized);
+    if (!mutation.changed) return;
+    set({ snapshot: mutation.snapshot });
+    persist(mutation.snapshot);
+    try {
+      await queueWorkspaceSave(mutation.snapshot);
+      await checkpointWorkspacePaths(
+        mutation.snapshot.settings.workspacePath,
+        [...mutation.changedPaths, ".atria/workspace.json"],
+        `Rename tag ${normalizeTagName(currentTag)} to ${normalized}`,
+        { actorName: "Local user", transactionId: crypto.randomUUID() },
+      );
+    } catch (error) {
+      set({ saveStatus: "error", saveError: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  },
+
+  async deleteTag(tag) {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const normalized = normalizeTagName(tag);
+    const mutation = mutateWorkspaceTag(snapshot, normalized);
+    if (!mutation.changed) return;
+    set({ snapshot: mutation.snapshot });
+    persist(mutation.snapshot);
+    try {
+      await queueWorkspaceSave(mutation.snapshot);
+      await checkpointWorkspacePaths(
+        mutation.snapshot.settings.workspacePath,
+        [...mutation.changedPaths, ".atria/workspace.json"],
+        `Delete tag ${normalized}`,
+        { actorName: "Local user", transactionId: crypto.randomUUID() },
+      );
+    } catch (error) {
+      set({ saveStatus: "error", saveError: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
   },
 
   async deleteNode(type, id) {
