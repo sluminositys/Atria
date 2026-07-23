@@ -1,13 +1,13 @@
 import { useMemo } from "react";
-import { ArrowRight, FileCode2, FileText } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, FileCode2, FileImage, FileText, Focus } from "lucide-react";
 import { buildDocumentGraph, DocumentGraphNode } from "@atria/core";
 import { WorkspaceSnapshot } from "@atria/schema";
 import { useAtriaStore } from "../app/store";
 import styles from "../app/App.module.css";
 
 const GRAPH_WIDTH = 300;
-const GRAPH_HEIGHT = 270;
-const GRAPH_NODE_LIMIT = 12;
+const GRAPH_HEIGHT = 238;
+const GRAPH_NODE_LIMIT = 14;
 
 interface PositionedNode extends DocumentGraphNode {
   x: number;
@@ -25,6 +25,10 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
   const positions = new Map(visibleNodes.map((node) => [node.id, node]));
   const visibleEdges = graph.edges.filter((edge) => positions.has(edge.sourceId) && positions.has(edge.targetId));
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const activeNode = activeTab ? nodesById.get(activeTab.id) : undefined;
+  const relatedEdges = activeNode
+    ? graph.edges.filter((edge) => edge.sourceId === activeNode.id || edge.targetId === activeNode.id)
+    : graph.edges;
 
   const openGraphNode = (node: DocumentGraphNode) => openNode(node.type, node.id);
 
@@ -32,9 +36,18 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
     <>
       <div className={styles.sideTitle}>
         <strong>File relations</strong>
-        <span>{graph.nodes.length} files · {graph.edges.length} connections</span>
+        <span>{graph.nodes.length} files / {graph.edges.length} connections</span>
       </div>
       <div className={styles.documentGraphPane}>
+        <div className={styles.graphScope}>
+          <Focus size={13} />
+          <strong>{activeNode?.title ?? "Workspace"}</strong>
+          <small>
+            {visibleNodes.length === graph.nodes.length
+              ? `${visibleNodes.length} shown`
+              : `${visibleNodes.length} of ${graph.nodes.length}`}
+          </small>
+        </div>
         <svg
           className={styles.documentGraphCanvas}
           viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
@@ -44,10 +57,13 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
           {visibleEdges.map((edge) => {
             const source = positions.get(edge.sourceId)!;
             const target = positions.get(edge.targetId)!;
+            const isActive = activeNode && (edge.sourceId === activeNode.id || edge.targetId === activeNode.id);
             return (
               <line
                 key={`${edge.sourceId}:${edge.targetId}:${edge.kind}`}
-                className={edge.kind === "embed" ? styles.graphEmbedEdge : styles.graphLinkEdge}
+                className={`${edge.kind === "embed" ? styles.graphEmbedEdge : styles.graphLinkEdge} ${
+                  isActive ? styles.graphActiveEdge : ""
+                }`}
                 x1={source.x}
                 y1={source.y}
                 x2={target.x}
@@ -56,7 +72,7 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
             );
           })}
           {visibleNodes.map((node) => {
-            const active = node.id === activeTab?.id;
+            const active = node.id === activeNode?.id;
             return (
               <g
                 key={`${node.type}:${node.id}`}
@@ -78,6 +94,15 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
                     height={active ? 16 : 12}
                     rx="2"
                   />
+                ) : node.type === "asset" ? (
+                  <rect
+                    className={styles.graphAssetNode}
+                    x={node.x - (active ? 7 : 5)}
+                    y={node.y - (active ? 7 : 5)}
+                    width={active ? 14 : 10}
+                    height={active ? 14 : 10}
+                    transform={`rotate(45 ${node.x} ${node.y})`}
+                  />
                 ) : (
                   <circle className={styles.graphDocumentNode} cx={node.x} cy={node.y} r={active ? 8 : 6} />
                 )}
@@ -86,39 +111,83 @@ export function DocumentGraphPane({ snapshot }: { snapshot: WorkspaceSnapshot })
                   {compactTitle(node.title)}
                 </text>
                 <title>{node.title}</title>
+                <rect
+                  className={styles.graphNodeHitArea}
+                  x={node.x - 46}
+                  y={node.y - 18}
+                  width={92}
+                  height={48}
+                  rx="4"
+                />
               </g>
             );
           })}
         </svg>
 
+        <div className={styles.graphLegend} aria-label="File relation legend">
+          <span><i className={styles.graphLegendDocument} />Document</span>
+          <span><i className={styles.graphLegendArtifact} />HTML</span>
+          <span><i className={styles.graphLegendAsset} />Asset</span>
+          <span><i className={styles.graphLegendEmbed} />Embed</span>
+        </div>
+
         <div className={styles.graphRelations}>
-          <strong>Connections</strong>
-          {graph.edges.slice(0, 30).map((edge) => {
+          <div className={styles.graphRelationsHeader}>
+            <strong>{activeNode ? "Related files" : "Workspace connections"}</strong>
+            <small>{relatedEdges.length}</small>
+          </div>
+          {relatedEdges.slice(0, 40).map((edge) => {
             const source = nodesById.get(edge.sourceId);
             const target = nodesById.get(edge.targetId);
             if (!source || !target) return null;
+            const related = activeNode?.id === target.id ? source : target;
+            const direction = activeNode?.id === target.id ? "incoming" : "outgoing";
             return (
               <button
                 type="button"
                 key={`${edge.sourceId}:${edge.targetId}:${edge.kind}`}
                 title={`${source.title} -> ${target.title}`}
-                onClick={() => openGraphNode(target)}
+                onClick={() => openGraphNode(related)}
               >
-                {source.type === "artifact" ? <FileCode2 size={13} /> : <FileText size={13} />}
-                <span>{source.title}</span>
-                <ArrowRight size={12} />
-                <span>{target.title}</span>
-                <small>{edge.kind === "embed" ? "Embedded" : "Linked"}</small>
+                <NodeIcon node={related} />
+                <span>
+                  <strong>{activeNode ? related.title : `${source.title} to ${target.title}`}</strong>
+                  <small>{relationLabel(edge.kind, direction, Boolean(activeNode))}</small>
+                </span>
+                {direction === "incoming" && activeNode ? <ArrowDownLeft size={13} /> : <ArrowUpRight size={13} />}
               </button>
             );
           })}
-          {graph.edges.length === 0 && (
-            <div className={styles.graphEmpty}>No connections</div>
+          {relatedEdges.length === 0 && (
+            <div className={styles.graphEmpty}>
+              <strong>{activeNode ? "No related files" : "No connections yet"}</strong>
+              <span>
+                {activeNode
+                  ? "This file has no local links or embeds."
+                  : "Connections appear when local files are linked or embedded."}
+              </span>
+            </div>
           )}
         </div>
       </div>
     </>
   );
+}
+
+function NodeIcon({ node }: { node: DocumentGraphNode }) {
+  if (node.type === "artifact") return <FileCode2 size={14} />;
+  if (node.type === "asset") return <FileImage size={14} />;
+  return <FileText size={14} />;
+}
+
+function relationLabel(
+  kind: "link" | "embed",
+  direction: "incoming" | "outgoing",
+  hasActiveNode: boolean,
+): string {
+  if (!hasActiveNode) return kind === "embed" ? "Embedded file" : "Linked file";
+  if (kind === "embed") return direction === "incoming" ? "Embeds this file" : "Embedded in this file";
+  return direction === "incoming" ? "Links to this file" : "Linked from this file";
 }
 
 function positionNodes(
@@ -155,7 +224,7 @@ function positionNodes(
   const centerX = GRAPH_WIDTH / 2;
   const centerY = GRAPH_HEIGHT / 2;
   const radiusX = 112;
-  const radiusY = 88;
+  const radiusY = 76;
   const positioned = visible.map((node, index) => {
     const angle = -Math.PI / 2 + (index / Math.max(visible.length, 1)) * Math.PI * 2;
     return {
@@ -170,5 +239,5 @@ function positionNodes(
 
 function compactTitle(title: string): string {
   const clean = title.trim() || "Untitled";
-  return clean.length > 16 ? `${clean.slice(0, 15)}…` : clean;
+  return clean.length > 16 ? `${clean.slice(0, 13)}...` : clean;
 }

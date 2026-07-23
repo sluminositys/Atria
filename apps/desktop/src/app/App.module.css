@@ -1771,19 +1771,48 @@
   height: calc(100vh - 58px);
   min-height: 0;
   display: grid;
-  grid-template-rows: 270px minmax(0, 1fr);
+  grid-template-rows: 30px 238px 28px minmax(0, 1fr);
   overflow: hidden;
   padding: 0 10px 14px;
+}
+
+.graphScope {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  color: var(--atria-muted);
+  font-size: 10px;
+}
+
+.graphScope strong,
+.graphScope small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphScope strong {
+  color: var(--atria-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.graphScope small {
+  color: var(--atria-faint);
 }
 
 .graphLegend {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-right: 4px;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 0 5px;
   color: var(--atria-muted);
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .graphLegend span {
@@ -1792,23 +1821,38 @@
   gap: 5px;
 }
 
-.graphHumanSwatch,
-.graphAgentSwatch {
+.graphLegendDocument,
+.graphLegendArtifact,
+.graphLegendAsset {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #2f343b;
 }
 
-.graphAgentSwatch {
+.graphLegendArtifact {
+  border-radius: 1px;
   background: #477f7d;
+}
+
+.graphLegendAsset {
+  border-radius: 1px;
+  background: #b06d3b;
+  transform: rotate(45deg);
+}
+
+.graphLegendEmbed {
+  width: 12px;
+  height: 0;
+  border-top: 1px dashed #5d9592;
 }
 
 .documentGraphCanvas {
   width: 100%;
-  height: 270px;
+  height: 238px;
   display: block;
-  border-bottom: 1px solid var(--atria-soft-line);
+  border: 1px solid var(--atria-soft-line);
+  border-radius: var(--atria-radius);
   background: #fbfbfa;
 }
 
@@ -1824,13 +1868,23 @@
   stroke-dasharray: 3 3;
 }
 
+.graphActiveEdge {
+  stroke-width: 1.6;
+}
+
 .graphNode {
   cursor: pointer;
   outline: none;
 }
 
+.graphNodeHitArea {
+  fill: rgb(0 0 0 / 0.001);
+  pointer-events: all;
+}
+
 .graphDocumentNode,
-.graphArtifactNode {
+.graphArtifactNode,
+.graphAssetNode {
   fill: #2f343b;
   stroke: white;
   stroke-width: 2;
@@ -1843,10 +1897,16 @@
   fill: #477f7d;
 }
 
+.graphAssetNode {
+  fill: #b06d3b;
+}
+
 .graphNode:hover .graphDocumentNode,
 .graphNode:hover .graphArtifactNode,
+.graphNode:hover .graphAssetNode,
 .graphNode:focus .graphDocumentNode,
-.graphNode:focus .graphArtifactNode {
+.graphNode:focus .graphArtifactNode,
+.graphNode:focus .graphAssetNode {
   transform: scale(1.24);
 }
 
@@ -1874,21 +1934,33 @@
   padding-top: 8px;
 }
 
-.graphRelations > strong {
+.graphRelationsHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 2px 6px 6px;
   color: var(--atria-muted);
   font-size: 11px;
+}
+
+.graphRelationsHeader strong {
   font-weight: 650;
+}
+
+.graphRelationsHeader small {
+  color: var(--atria-faint);
+  font-size: 10px;
 }
 
 .graphRelations button {
   min-width: 0;
-  height: 34px;
+  min-height: 40px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 14px minmax(0, 1fr) 52px;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
   align-items: center;
-  gap: 4px;
-  padding: 0 6px;
+  gap: 7px;
+  padding: 5px 7px;
   border: 0;
   border-radius: var(--atria-radius);
   background: transparent;
@@ -1901,6 +1973,7 @@
 }
 
 .graphRelations button span,
+.graphRelations button strong,
 .graphRelations button small {
   min-width: 0;
   overflow: hidden;
@@ -1909,20 +1982,36 @@
 }
 
 .graphRelations button span {
+  display: grid;
+  gap: 1px;
+}
+
+.graphRelations button strong {
   font-size: 11px;
+  font-weight: 550;
 }
 
 .graphRelations button small {
   color: var(--atria-faint);
   font-size: 9px;
-  text-transform: uppercase;
 }
 
 .graphEmpty {
-  padding: 24px 8px;
+  display: grid;
+  gap: 4px;
+  padding: 24px 12px;
   color: var(--atria-muted);
-  font-size: 12px;
   text-align: center;
+}
+
+.graphEmpty strong {
+  color: var(--atria-text);
+  font-size: 12px;
+}
+
+.graphEmpty span {
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .tagList {
