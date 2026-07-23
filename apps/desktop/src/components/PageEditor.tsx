@@ -138,6 +138,7 @@ export function PageEditor({ page, artifacts, snapshot }: PageEditorProps) {
         value={page.content ?? page.html ?? createEmptyDocument()}
         artifacts={artifacts}
         snapshot={snapshot}
+        documentFilePath={page.filePath}
         onChange={(content, html) => updatePage(page.id, { content, html })}
       />
     </article>

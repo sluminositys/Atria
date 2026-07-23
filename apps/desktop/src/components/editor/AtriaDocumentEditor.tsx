@@ -67,6 +67,7 @@ import { validateDocumentBodySource } from "./documentSource";
 import { imageFileValidationError, readImageFileAsDataUrl } from "./imageFiles";
 import { defaultHtmlSource } from "./htmlPreview";
 import { createTimelineItem, parseTimelineItems } from "./timelineItems";
+import { resolveWorkspaceReference } from "./workspaceReferences";
 import styles from "../../app/App.module.css";
 
 const HtmlSourceEditor = lazy(() =>
@@ -77,6 +78,7 @@ interface AtriaDocumentEditorProps {
   value?: AtriaDocumentContent | string;
   artifacts: Artifact[];
   snapshot?: WorkspaceSnapshot;
+  documentFilePath?: string;
   onChange(content: AtriaDocumentContent, html: string): void;
 }
 
@@ -135,7 +137,7 @@ const tableCellStyleAttributes = {
   },
 };
 
-export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
+export function AtriaDocumentEditor({ value, artifacts, snapshot, documentFilePath, onChange }: AtriaDocumentEditorProps) {
   const editorRef = useRef<Editor | null>(null);
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
@@ -156,7 +158,10 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     () => (workspacePath ? ({ settings: { workspacePath } } as WorkspaceSnapshot) : undefined),
     [workspacePath],
   );
-  const extensions = useMemo(() => createExtensions(artifacts, assetSnapshot), [artifacts, assetSnapshot]);
+  const extensions = useMemo(
+    () => createExtensions(artifacts, assetSnapshot, documentFilePath),
+    [artifacts, assetSnapshot, documentFilePath],
+  );
   const editor = useEditor(
     {
       extensions,
@@ -750,7 +755,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   );
 }
 
-function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
+function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot, documentFilePath?: string) {
   return [
     StableNodeId,
     TrailingParagraph,
@@ -842,7 +847,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     }).configure({ lowlight }),
     createCardNode(),
     createCalloutNode(),
-    createImageNode(snapshot),
+    createImageNode(snapshot, documentFilePath),
     createArtifactNode(artifacts, snapshot),
     createMermaidNode(),
     createInlineMathNode(),
@@ -950,7 +955,7 @@ function createCalloutNode() {
   });
 }
 
-function createImageNode(snapshot?: WorkspaceSnapshot) {
+function createImageNode(snapshot?: WorkspaceSnapshot, documentFilePath?: string) {
   return Node.create({
     name: "atriaImage",
     group: "block",
@@ -958,24 +963,88 @@ function createImageNode(snapshot?: WorkspaceSnapshot) {
     draggable: true,
     addAttributes() {
       return {
-        src: { default: "" },
-        caption: { default: "" },
-        alt: { default: "" },
-        width: { default: 640 },
-        height: { default: null },
+        src: {
+          default: "",
+          parseHTML: (element: HTMLElement) => {
+            const storedSource = element.getAttribute("data-src");
+            if (storedSource) return storedSource;
+            const source = imageElement(element).getAttribute("src") ?? "";
+            return element.matches("img")
+              ? resolveWorkspaceReference(source, documentFilePath)
+              : source;
+          },
+          renderHTML: (attributes: Record<string, unknown>) => attributes.src ? { "data-src": attributes.src } : {},
+        },
+        caption: {
+          default: "",
+          parseHTML: (element: HTMLElement) =>
+            element.matches("figure")
+              ? (element.querySelector("figcaption")?.textContent?.trim() ?? "")
+              : (element.getAttribute("title") ?? ""),
+          renderHTML: () => ({}),
+        },
+        alt: {
+          default: "",
+          parseHTML: (element: HTMLElement) => imageElement(element).getAttribute("alt") ?? "",
+          renderHTML: () => ({}),
+        },
+        width: {
+          default: 640,
+          parseHTML: (element: HTMLElement) => imageDimension(imageElement(element), "width") ?? 640,
+          renderHTML: (attributes: Record<string, unknown>) => attributes.width ? { "data-width": attributes.width } : {},
+        },
+        height: {
+          default: null,
+          parseHTML: (element: HTMLElement) => imageDimension(imageElement(element), "height"),
+          renderHTML: (attributes: Record<string, unknown>) => attributes.height ? { "data-height": attributes.height } : {},
+        },
         ...layoutAttributes,
       };
     },
     parseHTML() {
-      return [{ tag: 'figure[data-atria-node="image"]' }];
+      return [
+        { tag: 'figure[data-atria-node="image"]' },
+        { tag: "img[src]" },
+      ];
     },
-    renderHTML({ HTMLAttributes }) {
-      return ["figure", mergeAttributes(HTMLAttributes, { "data-atria-node": "image" })];
+    renderHTML({ HTMLAttributes, node }) {
+      const src = String(node.attrs.src ?? "");
+      const alt = String(node.attrs.alt ?? "");
+      const caption = String(node.attrs.caption ?? "");
+      const width = imageDimensionValue(node.attrs.width);
+      const height = imageDimensionValue(node.attrs.height);
+      return [
+        "figure",
+        mergeAttributes(HTMLAttributes, { "data-atria-node": "image" }),
+        [
+          "img",
+          {
+            src,
+            alt,
+            ...(width ? { width: String(width) } : {}),
+            ...(height ? { height: String(height) } : {}),
+          },
+        ],
+        ...(caption ? [["figcaption", {}, caption] as const] : []),
+      ];
     },
     addNodeView() {
       return ReactNodeViewRenderer((props) => <ImageNodeView {...props} snapshot={snapshot} />);
     },
   });
+}
+
+function imageElement(element: HTMLElement): HTMLElement {
+  return element.matches("img") ? element : (element.querySelector("img") as HTMLElement | null) ?? element;
+}
+
+function imageDimension(element: HTMLElement, name: "width" | "height"): number | null {
+  return imageDimensionValue(element.getAttribute(name) ?? element.style[name]);
+}
+
+function imageDimensionValue(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
 }
 
 function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
