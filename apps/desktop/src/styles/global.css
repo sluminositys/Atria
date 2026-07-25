@@ -11,7 +11,7 @@ body,
 }
 
 body {
-  min-width: 1120px;
+  min-width: 0;
   overflow: hidden;
   background: var(--atria-bg);
   color: var(--atria-text);
@@ -28,4 +28,3 @@ select {
 button {
   cursor: pointer;
 }
-
