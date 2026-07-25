@@ -2014,17 +2014,75 @@
   line-height: 1.45;
 }
 
-.tagList {
+.tagsPane {
+  height: calc(100vh - 58px);
+  min-height: 0;
   display: grid;
-  gap: 4px;
-  padding: 0 12px;
+  grid-template-rows: 42px minmax(96px, 0.42fr) minmax(0, 1fr);
+  overflow: hidden;
 }
 
-.tagList button {
-  min-height: 30px;
+.tagsSearch {
+  min-width: 0;
+  height: 32px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 3px;
+  margin: 0 10px 10px;
+  padding: 0 5px 0 8px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-muted);
+}
+
+.tagsSearch:focus-within {
+  border-color: #85b5f7;
+  box-shadow: 0 0 0 2px rgb(47 128 237 / 8%);
+}
+
+.tagsSearch input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--atria-text);
+  font-size: 11px;
+  outline: none;
+}
+
+.tagsSearch button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.tagsSearch button:hover { background: var(--atria-hover); }
+
+.tagsBrowser {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  overflow: auto;
+  padding: 0 10px 10px;
+}
+
+.tagRow,
+.tagRowActive {
+  min-width: 0;
+  min-height: 32px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 28px;
   align-items: center;
+  gap: 4px;
+  padding: 0 7px;
   border: 0;
   border-radius: var(--atria-radius);
   background: transparent;
@@ -2032,13 +2090,161 @@
   text-align: left;
 }
 
-.tagList small {
+.tagRow span,
+.tagRowActive span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagRow small,
+.tagRowActive small {
   color: var(--atria-faint);
+  font-size: 10px;
   text-align: right;
 }
 
-.tagList button:hover {
+.tagRow:hover,
+.tagRowActive {
   background: var(--atria-active);
+}
+
+.tagRowActive {
+  color: var(--atria-ink);
+}
+
+.tagsEmpty {
+  padding: 24px 10px;
+  color: var(--atria-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.tagDetails {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr);
+  overflow: hidden;
+  border-top: 1px solid var(--atria-soft-line);
+}
+
+.tagDetails > header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.tagDetails > header > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.tagDetails > header strong,
+.tagDetails > header small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagDetails > header strong {
+  color: var(--atria-ink);
+  font-size: 12px;
+}
+
+.tagDetails > header small {
+  color: var(--atria-faint);
+  font-size: 9px;
+}
+
+.tagDetails > header > div {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+.tagDetails > header button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.tagDetails > header button:hover { background: var(--atria-hover); color: var(--atria-ink); }
+
+.tagFiles {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  overflow: auto;
+  padding: 0 10px 12px;
+}
+
+.tagFiles > button {
+  min-width: 0;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: var(--atria-text);
+  text-align: left;
+}
+
+.tagFiles > button:hover { background: var(--atria-active); }
+
+.tagFiles > button > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.tagFiles strong,
+.tagFiles small,
+.tagFiles time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagFiles strong { font-size: 11px; font-weight: 550; }
+.tagFiles small { color: var(--atria-faint); font-size: 9px; }
+.tagFiles time { color: var(--atria-faint); font-size: 9px; text-align: right; }
+
+.tagDialogNotice {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: var(--atria-radius);
+  background: #eef5ff;
+  color: #315f9d;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tagDialog {
+  width: min(430px, calc(100vw - 32px));
 }
 
 .settingsNav {

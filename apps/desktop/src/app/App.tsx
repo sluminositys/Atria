@@ -11,7 +11,6 @@ import {
   FileCode2,
   FileText,
   GitBranch,
-  Hash,
   History as HistoryIcon,
   Image,
   Info,
@@ -34,6 +33,7 @@ import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { existingRecentFiles, relativeTimeLabel } from "./workspaceNavigation";
 import { FileTree } from "../components/FileTree";
 import { DocumentGraphPane } from "../components/DocumentGraphPane";
+import { TagsPane } from "../components/TagsPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
 import { UnsavedChangesDialog } from "../components/UnsavedChangesDialog";
@@ -497,39 +497,6 @@ function SearchPane() {
 
 function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").toLowerCase();
-}
-
-function TagsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
-  const tags = Array.from(
-    [...snapshot.pages, ...snapshot.artifacts].reduce((map, item) => {
-      for (const tag of item.tags ?? []) map.set(tag, (map.get(tag) ?? 0) + 1);
-      return map;
-    }, new Map<string, number>()),
-  ).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-
-  return (
-    <>
-      <div className={styles.sideTitle}>
-        <strong>Tags</strong>
-        <span>{tags.length} tags</span>
-      </div>
-      <div className={styles.tagList}>
-        {tags.map(([tag, count]) => (
-          <button
-            key={tag}
-            onClick={() => {
-              useAtriaStore.getState().setFilter(tag);
-              useAtriaStore.getState().setActiveTool("search");
-            }}
-          >
-            <Hash size={13} />
-            <span>{tag}</span>
-            <small>{count}</small>
-          </button>
-        ))}
-      </div>
-    </>
-  );
 }
 
 function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
