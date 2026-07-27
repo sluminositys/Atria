@@ -141,8 +141,13 @@ fn atria_default_workspace_path() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn atria_pick_workspace_directory(current_path: Option<String>) -> Option<String> {
-  let mut dialog = rfd::FileDialog::new().set_title("Open Atria workspace");
+fn atria_pick_workspace_directory(current_path: Option<String>, purpose: Option<String>) -> Option<String> {
+  let title = if purpose.as_deref() == Some("create") {
+    "Choose a parent folder for the new workspace"
+  } else {
+    "Open Atria workspace"
+  };
+  let mut dialog = rfd::FileDialog::new().set_title(title);
   if let Some(path) = current_path.filter(|path| !path.trim().is_empty()) {
     dialog = dialog.set_directory(path);
   }

@@ -30,9 +30,10 @@ import {
   X,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
-import { loadWorkspace, quitApplication, searchWorkspace } from "./workspaceClient";
+import { getWorkspaceDirectoryStatus, loadWorkspace, quitApplication, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { existingRecentFiles, relativeTimeLabel } from "./workspaceNavigation";
+import { readActiveWorkspacePath, sameWorkspacePath, setActiveWorkspacePath } from "./workspacePreferences";
 import { FileTree } from "../components/FileTree";
 import { DocumentGraphPane } from "../components/DocumentGraphPane";
 import { TagsPane } from "../components/TagsPane";
@@ -83,7 +84,7 @@ const blockPalette: Array<{
 export function App() {
   const query = useQuery({
     queryKey: ["workspace"],
-    queryFn: () => loadWorkspace(),
+    queryFn: loadInitialWorkspace,
   });
   const {
     activeTool,
@@ -121,16 +122,21 @@ export function App() {
   }, [closeTab]);
 
   useEffect(() => {
-    if (query.data) setSnapshot(query.data);
+    if (query.data) {
+      setActiveWorkspacePath(query.data.settings.workspacePath);
+      setSnapshot(query.data);
+    }
   }, [query.data, setSnapshot]);
 
   const requestWorkspaceChange = useCallback((nextSnapshot: WorkspaceSnapshot) => {
     const state = useAtriaStore.getState();
     if (sameWorkspacePath(state.snapshot?.settings.workspacePath, nextSnapshot.settings.workspacePath)) {
+      setActiveWorkspacePath(nextSnapshot.settings.workspacePath);
       setSnapshot(nextSnapshot);
       return;
     }
     if (!state.tabs.some((tab) => tab.dirty)) {
+      setActiveWorkspacePath(nextSnapshot.settings.workspacePath);
       setSnapshot(nextSnapshot);
       return;
     }
@@ -461,6 +467,7 @@ export function App() {
     const action = pendingWorkspaceAction;
     if (!action) return;
     if (action.intent === "switch") {
+      setActiveWorkspacePath(action.snapshot.settings.workspacePath);
       setSnapshot(action.snapshot);
       setPendingWorkspaceAction(undefined);
       setWorkspaceActionBusy(false);
@@ -639,11 +646,6 @@ function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").toLowerCase();
 }
 
-function sameWorkspacePath(left: string | undefined, right: string | undefined): boolean {
-  if (!left || !right) return left === right;
-  return left.trim().replace(/[\\/]+$/, "").toLowerCase() === right.trim().replace(/[\\/]+$/, "").toLowerCase();
-}
-
 function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   return (
     <>
@@ -667,6 +669,19 @@ function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
       </div>
     </>
   );
+}
+
+async function loadInitialWorkspace(): Promise<WorkspaceSnapshot> {
+  const preferredPath = readActiveWorkspacePath();
+  if (preferredPath) {
+    try {
+      const status = await getWorkspaceDirectoryStatus(preferredPath);
+      if (status.exists && status.directory) return await loadWorkspace(preferredPath);
+    } catch {
+      // The default workspace remains available when a remembered location cannot be inspected.
+    }
+  }
+  return loadWorkspace();
 }
 
 function dispatchInsert(type: AtriaBlockType | "drawing"): void {

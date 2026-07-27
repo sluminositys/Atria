@@ -2438,7 +2438,7 @@
 .workspacePathControl {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 6px;
 }
 
@@ -2457,9 +2457,25 @@
 
 .workspaceLocationLabel span {
   min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.workspaceLocationLabel strong,
+.workspaceLocationLabel small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspaceLocationLabel strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workspaceLocationLabel small {
+  color: var(--atria-muted);
+  font-size: 10px;
 }
 
 .workspacePathControl input {
@@ -2490,6 +2506,7 @@
   border-radius: var(--atria-radius);
   background: white;
   color: var(--atria-text);
+  white-space: nowrap;
 }
 
 .workspacePathControl button:hover:not(:disabled),
@@ -2522,9 +2539,22 @@
   font-weight: 650;
 }
 
-.recentWorkspaceList button {
+.recentWorkspaceRow {
   min-width: 0;
-  height: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  border-radius: var(--atria-radius);
+}
+
+.recentWorkspaceRow.recentWorkspaceActive {
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--atria-active);
+}
+
+.recentWorkspaceOpen {
+  min-width: 0;
+  min-height: 40px;
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) 20px;
   align-items: center;
@@ -2537,16 +2567,49 @@
   text-align: left;
 }
 
-.recentWorkspaceList button:hover,
-.recentWorkspaceList .recentWorkspaceActive {
+.recentWorkspaceOpen:hover:not(:disabled),
+.recentWorkspaceRemove:hover:not(:disabled) {
   background: var(--atria-active);
 }
 
-.recentWorkspaceList button span {
+.recentWorkspaceOpen:disabled {
+  cursor: default;
+}
+
+.recentWorkspaceOpen > span {
   min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.recentWorkspaceOpen strong,
+.recentWorkspaceOpen small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recentWorkspaceOpen strong {
+  color: var(--atria-text);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.recentWorkspaceOpen small {
+  color: var(--atria-muted);
+  font-size: 10px;
+}
+
+.recentWorkspaceRemove {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: var(--atria-muted);
 }
 
 .settingsStatusRows {

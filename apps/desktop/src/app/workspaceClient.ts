@@ -86,8 +86,8 @@ export async function getDefaultWorkspacePath(): Promise<string> {
   return invoke<string>("atria_default_workspace_path");
 }
 
-export async function pickWorkspaceDirectory(currentPath?: string): Promise<string | null> {
-  return invoke<string | null>("atria_pick_workspace_directory", { currentPath });
+export async function pickWorkspaceDirectory(currentPath?: string, purpose?: "open" | "create"): Promise<string | null> {
+  return invoke<string | null>("atria_pick_workspace_directory", { currentPath, purpose });
 }
 
 export async function getWorkspaceDirectoryStatus(path: string): Promise<WorkspaceDirectoryStatus> {
