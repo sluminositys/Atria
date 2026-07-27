@@ -11,7 +11,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 use std::time::UNIX_EPOCH;
-use tauri::tray::TrayIconBuilder;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager};
 
 mod git_history;
 
@@ -166,6 +168,31 @@ fn atria_agent_bridge_info() -> Result<AgentBridgeInfo, String> {
     available: candidate.is_file(),
     executable_path: candidate.to_string_lossy().into_owned(),
   })
+}
+
+#[tauri::command]
+fn atria_quit_app(app: tauri::AppHandle) {
+  app.exit(0);
+}
+
+#[tauri::command]
+fn atria_request_app_quit(app: tauri::AppHandle) {
+  request_frontend_quit(&app);
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+  }
+}
+
+fn request_frontend_quit(app: &tauri::AppHandle) {
+  show_main_window(app);
+  if app.emit("atria://quit-requested", ()).is_err() {
+    app.exit(0);
+  }
 }
 
 #[tauri::command]
@@ -415,9 +442,29 @@ fn main() {
   tauri::Builder::default()
     .setup(|app| {
       if let Some(icon) = app.default_window_icon().cloned() {
+        let show = MenuItem::with_id(app, "atria_tray_show", "Show Atria", true, None::<&str>)?;
+        let separator = PredefinedMenuItem::separator(app)?;
+        let quit = MenuItem::with_id(app, "atria_tray_quit", "Quit Atria", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&show, &separator, &quit])?;
         TrayIconBuilder::new()
           .icon(icon)
           .tooltip("Atria")
+          .menu(&menu)
+          .show_menu_on_left_click(false)
+          .on_menu_event(|app, event| match event.id().as_ref() {
+            "atria_tray_show" => show_main_window(app),
+            "atria_tray_quit" => request_frontend_quit(app),
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if matches!(
+              event,
+              TrayIconEvent::Click { button: MouseButton::Left, .. }
+                | TrayIconEvent::DoubleClick { button: MouseButton::Left, .. }
+            ) {
+              show_main_window(tray.app_handle());
+            }
+          })
           .build(app)?;
       }
       Ok(())
@@ -426,6 +473,8 @@ fn main() {
       atria_default_workspace_path,
       atria_pick_workspace_directory,
       atria_agent_bridge_info,
+      atria_request_app_quit,
+      atria_quit_app,
       atria_read_workspace,
       atria_search_workspace,
       atria_read_text_prefix,

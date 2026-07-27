@@ -6,7 +6,7 @@ import styles from "../app/App.module.css";
 
 interface UnsavedWorkspaceDialogProps {
   tabs: WorkspaceTab[];
-  intent: "switch" | "close";
+  intent: "switch" | "close" | "quit";
   busy: boolean;
   error: string;
   onCancel(): void;
@@ -28,7 +28,7 @@ export function UnsavedWorkspaceDialog({
   const saveRef = useRef<HTMLButtonElement | null>(null);
   const busyRef = useRef(busy);
   const cancelRef = useRef(onCancel);
-  const actionLabel = intent === "switch" ? "switching workspaces" : "closing Atria";
+  const actionLabel = intent === "switch" ? "switching workspaces" : intent === "quit" ? "quitting Atria" : "closing Atria";
 
   useEffect(() => {
     busyRef.current = busy;

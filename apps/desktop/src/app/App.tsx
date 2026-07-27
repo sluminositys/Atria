@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import {
   Box,
   AlertCircle,
@@ -29,7 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
-import { loadWorkspace, searchWorkspace } from "./workspaceClient";
+import { loadWorkspace, quitApplication, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { existingRecentFiles, relativeTimeLabel } from "./workspaceNavigation";
 import { FileTree } from "../components/FileTree";
@@ -43,7 +44,7 @@ import styles from "./App.module.css";
 
 type PendingWorkspaceAction =
   | { intent: "switch"; snapshot: WorkspaceSnapshot }
-  | { intent: "close" };
+  | { intent: "close" | "quit" };
 
 const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
 const ArtifactPreview = lazy(() => import("../components/ArtifactPreview").then((module) => ({ default: module.ArtifactPreview })));
@@ -139,6 +140,32 @@ export function App() {
     setWorkspaceActionError("");
     setPendingWorkspaceAction({ intent: "switch", snapshot: nextSnapshot });
   }, [setSnapshot]);
+
+  const requestTrayQuit = useCallback(() => {
+    const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    if (!dirtyTabs.length) {
+      void quitApplication();
+      return;
+    }
+    setPendingCloseKey("");
+    setCloseError("");
+    setWorkspaceActionBusy(false);
+    setWorkspaceActionError("");
+    setPendingWorkspaceAction({ intent: "quit" });
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen("atria://quit-requested", requestTrayQuit).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [requestTrayQuit]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -437,6 +464,10 @@ export function App() {
       setSnapshot(action.snapshot);
       setPendingWorkspaceAction(undefined);
       setWorkspaceActionBusy(false);
+      return;
+    }
+    if (action.intent === "quit") {
+      await quitApplication();
       return;
     }
     allowNativeCloseRef.current = true;

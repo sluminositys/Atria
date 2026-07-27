@@ -89,6 +89,10 @@ export async function getAgentBridgeInfo(): Promise<AgentBridgeInfo> {
   return invoke<AgentBridgeInfo>("atria_agent_bridge_info");
 }
 
+export async function quitApplication(): Promise<void> {
+  await invoke("atria_quit_app");
+}
+
 export async function searchWorkspace(
   rootPath: string,
   query: string,
