@@ -21,7 +21,16 @@ export function formatDocumentDiff(patch: string): DocumentDiffLine[] {
       lines.push({ text, kind: "hunk" });
       continue;
     }
-    if (text.startsWith("---") || text.startsWith("+++") || text.startsWith("diff ") || text.startsWith("index ") || text.startsWith("\\")) {
+    if (text.startsWith("diff ") || text.startsWith("index ")) continue;
+    if (text.startsWith("---")) {
+      lines.push({ text: "--- Previous revision", kind: "meta" });
+      continue;
+    }
+    if (text.startsWith("+++")) {
+      lines.push({ text: "+++ Selected revision", kind: "meta" });
+      continue;
+    }
+    if (text.startsWith("\\")) {
       lines.push({ text, kind: "meta" });
       continue;
     }

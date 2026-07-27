@@ -15,7 +15,7 @@ describe("formatDocumentDiff", () => {
       " ending",
     ].join("\n"));
 
-    expect(lines.slice(3)).toEqual([
+    expect(lines.slice(2)).toEqual([
       { text: "@@ -4,3 +4,4 @@", kind: "hunk" },
       { text: " unchanged", kind: "context", oldLine: 4, newLine: 4 },
       { text: "-old result", kind: "deleted", oldLine: 5 },
@@ -23,6 +23,11 @@ describe("formatDocumentDiff", () => {
       { text: "+new detail", kind: "added", newLine: 6 },
       { text: " ending", kind: "context", oldLine: 6, newLine: 7 },
     ]);
+    expect(lines.slice(0, 2)).toEqual([
+      { text: "--- Previous revision", kind: "meta" },
+      { text: "+++ Selected revision", kind: "meta" },
+    ]);
+    expect(lines.some((line) => line.text.includes("note.html"))).toBe(false);
   });
 
   it("resets counters for each hunk and keeps metadata unnumbered", () => {
