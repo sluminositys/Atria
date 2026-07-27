@@ -36,6 +36,13 @@ struct WorkspaceReadResult {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkspaceDirectoryStatus {
+  exists: bool,
+  directory: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AgentBridgeInfo {
   executable_path: String,
   available: bool,
@@ -142,6 +149,64 @@ fn atria_pick_workspace_directory(current_path: Option<String>) -> Option<String
   dialog
     .pick_folder()
     .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn validate_workspace_name(name: &str) -> Result<String, String> {
+  let clean = name.trim();
+  if clean.is_empty() {
+    return Err("Enter a workspace name.".to_string());
+  }
+  if clean.chars().count() > 80 {
+    return Err("Workspace names must be 80 characters or fewer.".to_string());
+  }
+  if clean == "." || clean == ".." || clean.ends_with(['.', ' ']) {
+    return Err("Choose a workspace name without trailing spaces or periods.".to_string());
+  }
+  if clean.chars().any(|character| character.is_control() || r#"<>:"/\|?*"#.contains(character)) {
+    return Err("The workspace name contains a character that is not allowed in folder names.".to_string());
+  }
+  let device_name = clean
+    .split('.')
+    .next()
+    .unwrap_or(clean)
+    .to_ascii_uppercase();
+  let reserved = matches!(device_name.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+    || (device_name.len() == 4
+      && (device_name.starts_with("COM") || device_name.starts_with("LPT"))
+      && matches!(device_name.as_bytes()[3], b'1'..=b'9'));
+  if reserved {
+    return Err("Choose a different workspace name.".to_string());
+  }
+  Ok(clean.to_string())
+}
+
+#[tauri::command]
+fn atria_workspace_directory_status(path: String) -> Result<WorkspaceDirectoryStatus, String> {
+  let clean = path.trim();
+  if clean.is_empty() {
+    return Err("Workspace location is empty.".to_string());
+  }
+  let location = PathBuf::from(clean);
+  if !location.exists() {
+    return Ok(WorkspaceDirectoryStatus { exists: false, directory: false });
+  }
+  let metadata = fs::metadata(location).map_err(|error| error.to_string())?;
+  Ok(WorkspaceDirectoryStatus { exists: true, directory: metadata.is_dir() })
+}
+
+#[tauri::command]
+fn atria_create_workspace_directory(parent_path: String, name: String) -> Result<String, String> {
+  let parent = PathBuf::from(parent_path.trim());
+  if !parent.is_dir() {
+    return Err("Choose an existing parent folder.".to_string());
+  }
+  let clean_name = validate_workspace_name(&name)?;
+  let destination = parent.join(clean_name);
+  if destination.exists() {
+    return Err("A file or folder with that name already exists.".to_string());
+  }
+  fs::create_dir(&destination).map_err(|error| error.to_string())?;
+  Ok(destination.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -472,6 +537,8 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       atria_default_workspace_path,
       atria_pick_workspace_directory,
+      atria_workspace_directory_status,
+      atria_create_workspace_directory,
       atria_agent_bridge_info,
       atria_request_app_quit,
       atria_quit_app,
@@ -502,10 +569,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
   use super::{
-    atria_move_path, atria_open_workspace_file, atria_workspace_file_metadata,
-    is_searchable_document, search_snippet,
+    atria_create_workspace_directory, atria_move_path, atria_open_workspace_file,
+    atria_workspace_directory_status, atria_workspace_file_metadata, is_searchable_document,
+    search_snippet, validate_workspace_name,
   };
   use std::fs;
+  use std::path::PathBuf;
 
   #[test]
   fn limits_search_to_document_formats() {
@@ -569,5 +638,45 @@ mod tests {
     assert_eq!(entry.kind, "file");
     assert!(entry.modified_ms.is_some());
     fs::remove_dir_all(root).unwrap();
+  }
+
+  #[test]
+  fn creates_a_named_workspace_without_materializing_its_contents() {
+    let parent = std::env::temp_dir().join(format!("atria-workspace-parent-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&parent).unwrap();
+
+    let created = atria_create_workspace_directory(
+      parent.to_string_lossy().into_owned(),
+      "Research Notes".to_string(),
+    )
+    .unwrap();
+    let created = PathBuf::from(created);
+    assert!(created.is_dir());
+    assert!(!created.join(".atria").exists());
+    assert!(atria_create_workspace_directory(
+      parent.to_string_lossy().into_owned(),
+      "Research Notes".to_string(),
+    )
+    .unwrap_err()
+    .contains("already exists"));
+
+    fs::remove_dir_all(parent).unwrap();
+  }
+
+  #[test]
+  fn reports_missing_workspaces_without_creating_them() {
+    let missing = std::env::temp_dir().join(format!("atria-missing-{}", uuid::Uuid::new_v4()));
+    let status = atria_workspace_directory_status(missing.to_string_lossy().into_owned()).unwrap();
+    assert!(!status.exists);
+    assert!(!status.directory);
+    assert!(!missing.exists());
+  }
+
+  #[test]
+  fn rejects_unsafe_or_reserved_workspace_names() {
+    for name in ["", "..", "report/2026", "draft.", "CON", "LPT1.txt"] {
+      assert!(validate_workspace_name(name).is_err(), "{name} should be rejected");
+    }
+    assert_eq!(validate_workspace_name("Atria Research").unwrap(), "Atria Research");
   }
 }

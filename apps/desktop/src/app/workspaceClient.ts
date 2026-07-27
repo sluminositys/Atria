@@ -65,6 +65,11 @@ export interface AgentBridgeInfo {
   available: boolean;
 }
 
+export interface WorkspaceDirectoryStatus {
+  exists: boolean;
+  directory: boolean;
+}
+
 export interface WorkspaceContentMatch {
   relativePath: string;
   snippet: string;
@@ -83,6 +88,14 @@ export async function getDefaultWorkspacePath(): Promise<string> {
 
 export async function pickWorkspaceDirectory(currentPath?: string): Promise<string | null> {
   return invoke<string | null>("atria_pick_workspace_directory", { currentPath });
+}
+
+export async function getWorkspaceDirectoryStatus(path: string): Promise<WorkspaceDirectoryStatus> {
+  return invoke<WorkspaceDirectoryStatus>("atria_workspace_directory_status", { path });
+}
+
+export async function createWorkspaceDirectory(parentPath: string, name: string): Promise<string> {
+  return invoke<string>("atria_create_workspace_directory", { parentPath, name });
 }
 
 export async function getAgentBridgeInfo(): Promise<AgentBridgeInfo> {
