@@ -2637,6 +2637,7 @@
 }
 
 .historyView {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -2790,6 +2791,24 @@
   font-size: 12px;
 }
 
+.historyNotice {
+  position: absolute;
+  z-index: 5;
+  top: 120px;
+  right: 18px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #b7dec8;
+  border-radius: var(--atria-radius);
+  background: #eef9f2;
+  box-shadow: 0 6px 18px rgb(16 24 40 / 8%);
+  color: #176b44;
+  font-size: 11px;
+}
+
 .diffAdded {
   color: #16794b;
 }
@@ -2806,20 +2825,39 @@
   min-height: 0;
   margin: 0;
   overflow: auto;
-  padding: 16px 0 32px;
+  padding: 12px 0 32px;
   background: #fcfcfb;
   color: #30343b;
   font-family: var(--atria-mono);
   font-size: 12px;
-  line-height: 1.55;
   tab-size: 2;
 }
 
-.sourceDiff > span {
+.sourceDiffLine {
   min-width: max-content;
+  min-height: 20px;
+  display: grid;
+  grid-template-columns: 42px 42px minmax(max-content, 1fr);
+  align-items: stretch;
+}
+
+.sourceDiffLine code {
   display: block;
-  padding: 0 18px;
+  padding: 1px 14px;
+  font-family: inherit;
+  line-height: 18px;
   white-space: pre;
+}
+
+.diffLineNumber {
+  min-width: 0;
+  padding: 1px 7px;
+  border-right: 1px solid #ececea;
+  color: #a0a4aa;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: right;
+  user-select: none;
 }
 
 .diffLineAdded {
@@ -2835,6 +2873,10 @@
 .diffLineHunk {
   background: #eef4ff;
   color: #315f9d;
+}
+
+.diffLineMeta {
+  color: #7b818a;
 }
 
 .renderedDiff {
@@ -2878,16 +2920,107 @@
 }
 
 .historyLoading,
-.historyError {
+.historyError,
+.historyEmpty,
+.diffEmpty {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 7px;
   padding: 24px;
   color: var(--atria-muted);
   font-size: 13px;
+  text-align: center;
 }
 
 .historyError {
   color: #a83232;
+}
+
+.historyError button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-text);
+}
+
+.historyEmpty strong,
+.diffEmpty strong {
+  color: var(--atria-ink);
+  font-size: 13px;
+}
+
+.historyEmpty span,
+.diffEmpty span {
+  max-width: 320px;
+  color: var(--atria-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.restoreDialog {
+  width: min(500px, calc(100vw - 32px));
+}
+
+.restoreDialog > footer {
+  flex-wrap: wrap;
+}
+
+.restoreRevisionSummary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #fafaf9;
+}
+
+.restoreRevisionSummary > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.restoreRevisionSummary strong,
+.restoreRevisionSummary small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restoreRevisionSummary strong {
+  color: var(--atria-ink);
+  font-size: 12px;
+}
+
+.restoreRevisionSummary small {
+  color: var(--atria-muted);
+  font-size: 10px;
+}
+
+.restoreDraftWarning {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 19px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--atria-radius);
+  background: #fff7e8;
+  color: #80510b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.restoreDraftWarning span,
+.restoreDraftWarning strong {
+  display: block;
 }
 
 @media (max-width: 1180px) {

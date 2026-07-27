@@ -382,7 +382,7 @@ function HistoryPane({ target }: { target?: HistoryTarget }) {
           <HistoryIcon size={16} />
           <span>
             <strong>{target.title}</strong>
-            <small>{target.path}</small>
+            <small>{target.kind === "html-artifact" ? "HTML result history" : "Document history"}</small>
           </span>
         </div>
       )}
