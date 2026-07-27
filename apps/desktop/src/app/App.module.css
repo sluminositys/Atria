@@ -378,6 +378,59 @@
   width: min(440px, calc(100vw - 32px));
 }
 
+.unsavedWorkspaceDialog {
+  width: min(500px, calc(100vw - 32px));
+}
+
+.unsavedWorkspaceList {
+  min-width: 0;
+  max-height: min(260px, 40vh);
+  display: grid;
+  gap: 4px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: #fafaf9;
+}
+
+.unsavedWorkspaceList > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  color: var(--atria-muted);
+}
+
+.unsavedWorkspaceList > div + div {
+  border-top: 1px solid var(--atria-soft-line);
+}
+
+.unsavedWorkspaceList span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.unsavedWorkspaceList strong,
+.unsavedWorkspaceList small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unsavedWorkspaceList strong {
+  color: var(--atria-ink);
+  font-size: 12px;
+}
+
+.unsavedWorkspaceList small {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
 .unsavedFileSummary {
   min-width: 0;
   display: grid;

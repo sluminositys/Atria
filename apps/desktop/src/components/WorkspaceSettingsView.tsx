@@ -14,10 +14,10 @@ const RECENT_WORKSPACES_KEY = "atria:recent-workspaces";
 
 interface WorkspaceSettingsViewProps {
   snapshot: WorkspaceSnapshot;
-  onLoaded(snapshot: WorkspaceSnapshot): void;
+  onWorkspaceChangeRequested(snapshot: WorkspaceSnapshot): void;
 }
 
-export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsViewProps) {
+export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: WorkspaceSettingsViewProps) {
   const currentPath = snapshot.settings.workspacePath;
   const [recentPaths, setRecentPaths] = useState(() => readRecentWorkspaces(currentPath));
   const [bridge, setBridge] = useState<AgentBridgeInfo>();
@@ -66,7 +66,7 @@ export function WorkspaceSettingsView({ snapshot, onLoaded }: WorkspaceSettingsV
     try {
       const next = await loadWorkspace(target);
       setRecentPaths(rememberWorkspace(next.settings.workspacePath));
-      onLoaded(next);
+      onWorkspaceChangeRequested(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

@@ -1,5 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Box,
   AlertCircle,
@@ -37,7 +38,12 @@ import { TagsPane } from "../components/TagsPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
 import { UnsavedChangesDialog } from "../components/UnsavedChangesDialog";
+import { UnsavedWorkspaceDialog } from "../components/UnsavedWorkspaceDialog";
 import styles from "./App.module.css";
+
+type PendingWorkspaceAction =
+  | { intent: "switch"; snapshot: WorkspaceSnapshot }
+  | { intent: "close" };
 
 const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
 const ArtifactPreview = lazy(() => import("../components/ArtifactPreview").then((module) => ({ default: module.ArtifactPreview })));
@@ -91,10 +97,15 @@ export function App() {
     saveError,
     retrySave,
     saveSourceDraft,
+    clearSourceDraft,
   } = useAtriaStore();
   const [pendingCloseKey, setPendingCloseKey] = useState("");
   const [closeBusy, setCloseBusy] = useState(false);
   const [closeError, setCloseError] = useState("");
+  const [pendingWorkspaceAction, setPendingWorkspaceAction] = useState<PendingWorkspaceAction>();
+  const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState("");
+  const allowNativeCloseRef = useRef(false);
 
   const requestCloseTab = useCallback((key: string) => {
     const tab = useAtriaStore.getState().tabs.find((item) => item.key === key);
@@ -111,6 +122,46 @@ export function App() {
   useEffect(() => {
     if (query.data) setSnapshot(query.data);
   }, [query.data, setSnapshot]);
+
+  const requestWorkspaceChange = useCallback((nextSnapshot: WorkspaceSnapshot) => {
+    const state = useAtriaStore.getState();
+    if (sameWorkspacePath(state.snapshot?.settings.workspacePath, nextSnapshot.settings.workspacePath)) {
+      setSnapshot(nextSnapshot);
+      return;
+    }
+    if (!state.tabs.some((tab) => tab.dirty)) {
+      setSnapshot(nextSnapshot);
+      return;
+    }
+    setPendingCloseKey("");
+    setCloseError("");
+    setWorkspaceActionBusy(false);
+    setWorkspaceActionError("");
+    setPendingWorkspaceAction({ intent: "switch", snapshot: nextSnapshot });
+  }, [setSnapshot]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void getCurrentWindow().onCloseRequested((event) => {
+      if (allowNativeCloseRef.current) return;
+      const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+      if (!dirtyTabs.length) return;
+      event.preventDefault();
+      setPendingCloseKey("");
+      setCloseError("");
+      setWorkspaceActionBusy(false);
+      setWorkspaceActionError("");
+      setPendingWorkspaceAction({ intent: "close" });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     function handleTabShortcuts(event: KeyboardEvent) {
@@ -236,7 +287,7 @@ export function App() {
         <section className={styles.documentSurface}>
           <Suspense fallback={<div className={styles.viewLoading} aria-busy="true" />}>
             {activeTool === "settings" && snapshot ? (
-              <WorkspaceSettingsView snapshot={snapshot} onLoaded={setSnapshot} />
+              <WorkspaceSettingsView snapshot={snapshot} onWorkspaceChangeRequested={requestWorkspaceChange} />
             ) : activeTool === "history" && historyTarget && snapshot ? (
               <DocumentHistoryView
                 snapshot={snapshot}
@@ -316,6 +367,21 @@ export function App() {
           onSave={() => void saveAndClose(pendingCloseTab.key)}
         />
       )}
+      {pendingWorkspaceAction && (
+        <UnsavedWorkspaceDialog
+          tabs={tabs.filter((tab) => tab.dirty)}
+          intent={pendingWorkspaceAction.intent}
+          busy={workspaceActionBusy}
+          error={workspaceActionError}
+          onCancel={() => {
+            if (workspaceActionBusy) return;
+            setPendingWorkspaceAction(undefined);
+            setWorkspaceActionError("");
+          }}
+          onDiscardAll={() => void discardAllAndContinue()}
+          onSaveAll={() => void saveAllAndContinue()}
+        />
+      )}
     </div>
   );
 
@@ -332,6 +398,49 @@ export function App() {
     }
     setCloseBusy(false);
     setCloseError(result.status === "saved" ? "The draft changed while it was being saved. Save it again to close." : result.message);
+  }
+
+  async function saveAllAndContinue() {
+    if (workspaceActionBusy || !pendingWorkspaceAction) return;
+    setWorkspaceActionBusy(true);
+    setWorkspaceActionError("");
+    const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    for (const tab of dirtyTabs) {
+      const result = await saveSourceDraft(tab.key);
+      if (result.status !== "saved") {
+        setWorkspaceActionBusy(false);
+        setWorkspaceActionError(`Could not save ${tab.title}. ${result.message}`);
+        return;
+      }
+    }
+    const remaining = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    if (remaining.length) {
+      setWorkspaceActionBusy(false);
+      setWorkspaceActionError("Some files changed while they were being saved. Save all again to continue.");
+      return;
+    }
+    await continueWorkspaceAction();
+  }
+
+  async function discardAllAndContinue() {
+    if (workspaceActionBusy || !pendingWorkspaceAction) return;
+    setWorkspaceActionBusy(true);
+    setWorkspaceActionError("");
+    useAtriaStore.getState().tabs.filter((tab) => tab.dirty).forEach((tab) => clearSourceDraft(tab.key));
+    await continueWorkspaceAction();
+  }
+
+  async function continueWorkspaceAction() {
+    const action = pendingWorkspaceAction;
+    if (!action) return;
+    if (action.intent === "switch") {
+      setSnapshot(action.snapshot);
+      setPendingWorkspaceAction(undefined);
+      setWorkspaceActionBusy(false);
+      return;
+    }
+    allowNativeCloseRef.current = true;
+    await getCurrentWindow().close();
   }
 
   function renderSidePane(current: WorkspaceSnapshot) {
@@ -497,6 +606,11 @@ function SearchPane() {
 
 function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").toLowerCase();
+}
+
+function sameWorkspacePath(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) return left === right;
+  return left.trim().replace(/[\\/]+$/, "").toLowerCase() === right.trim().replace(/[\\/]+$/, "").toLowerCase();
 }
 
 function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {

@@ -342,10 +342,14 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       settings: { ...nextSnapshot.settings, recentFiles },
     };
     set((state) => {
-      const sourceDrafts = state.snapshot && state.snapshot.settings.workspacePath !== snapshot.settings.workspacePath
-        ? {}
-        : state.sourceDrafts;
-      const tabs = state.tabs
+      const workspaceChanged = Boolean(state.snapshot)
+        && !sameWorkspacePath(state.snapshot?.settings.workspacePath, snapshot.settings.workspacePath);
+      if (workspaceChanged && Object.values(state.sourceDrafts).some(isSourceDraftDirty)) {
+        console.error("Blocked a workspace change while source drafts are unsaved.");
+        return state;
+      }
+      const sourceDrafts = workspaceChanged ? {} : state.sourceDrafts;
+      const tabs = (workspaceChanged ? [] : state.tabs)
         .map((tab) => {
           const exists =
             tab.type === "artifact"
@@ -411,9 +415,10 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         snapshot,
         tabs,
         sourceDrafts: retainDraftsForTabs(sourceDrafts, tabs),
-        selectedFolderId: snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
+        selectedFolderId: !workspaceChanged && snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
           ? state.selectedFolderId
           : snapshot.folders[0]?.id || "",
+        filter: workspaceChanged ? "" : state.filter,
         activeTabKey,
         activeBlockId,
         activeBlockPageId: activeBlockId && activePage ? activePage.id : undefined,
@@ -1124,6 +1129,11 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     persist(get().snapshot);
   },
 }));
+
+function sameWorkspacePath(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) return left === right;
+  return left.trim().replace(/[\\/]+$/, "").toLowerCase() === right.trim().replace(/[\\/]+$/, "").toLowerCase();
+}
 
 export function getActiveTab(state: Pick<AtriaState, "activeTabKey" | "tabs">): WorkspaceTab | undefined {
   return state.tabs.find((tab) => tab.key === state.activeTabKey);
