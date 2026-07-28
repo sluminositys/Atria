@@ -63,6 +63,8 @@ export interface GitDocumentDiff {
 export interface AgentBridgeInfo {
   executablePath: string;
   available: boolean;
+  version: string;
+  toolCount: number;
 }
 
 export interface WorkspaceDirectoryStatus {

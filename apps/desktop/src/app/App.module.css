@@ -2358,9 +2358,34 @@
 .settingsHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 22px;
   border-bottom: 1px solid var(--atria-soft-line);
   background: white;
+}
+
+.settingsRefreshButton {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atria-radius);
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.settingsRefreshButton:hover:not(:disabled),
+.settingsRefreshButton:focus-visible {
+  background: var(--atria-hover);
+  color: var(--atria-ink);
+  outline: none;
+}
+
+.settingsRefreshButton:disabled {
+  opacity: 0.5;
 }
 
 .settingsHeader > div {
@@ -2433,6 +2458,36 @@
   display: grid;
   align-content: start;
   gap: 14px;
+}
+
+.agentBridgeFacts {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.agentBridgeFacts > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--atria-soft-line);
+  border-radius: var(--atria-radius);
+  background: #fafafa;
+}
+
+.agentBridgeFacts span {
+  color: var(--atria-muted);
+  font-size: 10px;
+}
+
+.agentBridgeFacts strong {
+  overflow: hidden;
+  color: var(--atria-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspacePathControl {

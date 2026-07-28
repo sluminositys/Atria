@@ -46,7 +46,11 @@ struct WorkspaceDirectoryStatus {
 struct AgentBridgeInfo {
   executable_path: String,
   available: bool,
+  version: String,
+  tool_count: usize,
 }
+
+const MCP_TOOL_COUNT: usize = 11;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -237,6 +241,8 @@ fn atria_agent_bridge_info() -> Result<AgentBridgeInfo, String> {
   Ok(AgentBridgeInfo {
     available: candidate.is_file(),
     executable_path: candidate.to_string_lossy().into_owned(),
+    version: env!("CARGO_PKG_VERSION").to_string(),
+    tool_count: MCP_TOOL_COUNT,
   })
 }
 

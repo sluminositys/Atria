@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   FolderPlus,
   GitBranch,
   LoaderCircle,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { WorkspaceSnapshot } from "@atria/schema";
@@ -42,6 +43,11 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
   const [recentPaths, setRecentPaths] = useState(() => readRecentWorkspacePaths(currentPath));
   const [bridge, setBridge] = useState<AgentBridgeInfo>();
   const [gitStatus, setGitStatus] = useState<{ branch?: string; head?: string; initialized: boolean }>();
+  const [gitDirty, setGitDirty] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [bridgeError, setBridgeError] = useState("");
+  const [gitError, setGitError] = useState("");
+  const [copyError, setCopyError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
@@ -49,6 +55,7 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
   const [newWorkspaceParent, setNewWorkspaceParent] = useState("");
   const [newWorkspaceBusy, setNewWorkspaceBusy] = useState(false);
   const [newWorkspaceError, setNewWorkspaceError] = useState("");
+  const statusRequestRef = useRef(0);
   const workspaceLabels = useMemo(() => workspaceDisplayLabels(recentPaths), [recentPaths]);
 
   useEffect(() => {
@@ -73,14 +80,38 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
     };
   }, [recentPaths]);
 
-  useEffect(() => {
-    let active = true;
-    void getAgentBridgeInfo().then((value) => active && setBridge(value));
-    void getWorkspaceHistoryStatus(currentPath).then((value) => active && setGitStatus(value));
-    return () => {
-      active = false;
-    };
+  const refreshStatus = useCallback(async () => {
+    const requestId = ++statusRequestRef.current;
+    setStatusBusy(true);
+    setBridgeError("");
+    setGitError("");
+    const [bridgeResult, gitResult] = await Promise.allSettled([
+      getAgentBridgeInfo(),
+      getWorkspaceHistoryStatus(currentPath),
+    ]);
+    if (requestId !== statusRequestRef.current) return;
+    if (bridgeResult.status === "fulfilled") setBridge(bridgeResult.value);
+    else {
+      setBridge(undefined);
+      setBridgeError("Agent bridge status could not be read.");
+    }
+    if (gitResult.status === "fulfilled") {
+      setGitStatus(gitResult.value);
+      setGitDirty(gitResult.value.dirty);
+    } else {
+      setGitStatus(undefined);
+      setGitDirty(false);
+      setGitError("Document history status could not be read.");
+    }
+    setStatusBusy(false);
   }, [currentPath]);
+
+  useEffect(() => {
+    void refreshStatus();
+    return () => {
+      statusRequestRef.current += 1;
+    };
+  }, [refreshStatus]);
 
   const mcpConfiguration = useMemo(
     () =>
@@ -155,9 +186,14 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
 
   async function copyAgentConfiguration() {
     if (!mcpConfiguration) return;
-    await navigator.clipboard.writeText(mcpConfiguration);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(mcpConfiguration);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopyError("The MCP configuration could not be copied.");
+    }
   }
 
   return (
@@ -167,6 +203,16 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
           <strong>Settings</strong>
           <span>Local workspace</span>
         </div>
+        <button
+          type="button"
+          className={styles.settingsRefreshButton}
+          title="Refresh Git and Agent status"
+          aria-label="Refresh Git and Agent status"
+          disabled={statusBusy}
+          onClick={() => void refreshStatus()}
+        >
+          <RefreshCw className={statusBusy ? styles.spin : undefined} size={15} />
+        </button>
       </header>
 
       <div className={styles.settingsBody}>
@@ -255,19 +301,24 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
             <GitBranch size={17} />
             <span>
               <strong>Document history</strong>
-              <small>{gitStatus?.initialized ? gitStatus.branch ?? "main" : "Unavailable"}</small>
+              <small>{gitError ? "Status unavailable" : gitStatus?.initialized ? gitStatus.branch ?? "main" : "Checking"}</small>
             </span>
           </div>
           <div className={styles.settingsStatusRows}>
             <div>
               <span>Repository</span>
-              <strong>{gitStatus?.initialized ? "Ready" : "Checking"}</strong>
+              <strong>{gitError ? "Unavailable" : !gitStatus ? "Checking" : gitStatus.initialized ? (gitDirty ? "Changes" : "Ready") : "Unavailable"}</strong>
             </div>
             <div>
               <span>Revision</span>
               <code>{gitStatus?.head?.slice(0, 10) ?? "No revisions"}</code>
             </div>
+            <div>
+              <span>Working tree</span>
+              <strong>{gitStatus ? (gitDirty ? "Changes pending" : "Clean") : "Checking"}</strong>
+            </div>
           </div>
+          {gitError && <div className={styles.settingsError}>{gitError}</div>}
         </section>
 
         <section className={styles.settingsSection}>
@@ -275,14 +326,21 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
             <Bot size={17} />
             <span>
               <strong>Agent bridge</strong>
-              <small>Native MCP</small>
+              <small>{bridge?.available ? `MCP v${bridge.version}` : "Native MCP"}</small>
             </span>
           </div>
           <div className={styles.agentBridgeSettings}>
             <div className={styles.agentBridgeStatus}>
               <span className={bridge?.available ? styles.statusDotReady : styles.statusDotIdle} />
-              <strong>{bridge ? (bridge.available ? "Ready" : "Missing") : "Checking"}</strong>
+              <strong>{bridgeError ? "Unavailable" : bridge ? (bridge.available ? "Ready" : "Missing") : "Checking"}</strong>
             </div>
+            {bridge?.available && (
+              <div className={styles.agentBridgeFacts}>
+                <div><span>Version</span><strong>{bridge.version}</strong></div>
+                <div><span>Tools</span><strong>{bridge.toolCount}</strong></div>
+                <div><span>Transport</span><strong>stdio</strong></div>
+              </div>
+            )}
             <div className={styles.agentBridgePath}>
               <span>{bridge ? (bridge.available ? "Bundled with Atria" : "Not available") : "Checking"}</span>
               <button
@@ -295,6 +353,8 @@ export function WorkspaceSettingsView({ snapshot, onWorkspaceChangeRequested }: 
                 <span>{copied ? "Copied" : "Copy config"}</span>
               </button>
             </div>
+            {bridgeError && <div className={styles.settingsError}>{bridgeError}</div>}
+            {copyError && <div className={styles.settingsError}>{copyError}</div>}
           </div>
         </section>
       </div>

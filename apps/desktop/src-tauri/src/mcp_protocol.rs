@@ -948,6 +948,7 @@ mod tests {
   #[test]
   fn tool_contract_names_the_editor_body_and_stable_id() {
     let tools = tool_definitions();
+    assert_eq!(tools.len(), 11);
     let create = tools
       .iter()
       .find(|tool| tool["name"] == "document_create")
