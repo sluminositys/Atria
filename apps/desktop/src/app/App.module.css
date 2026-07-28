@@ -1824,9 +1824,94 @@
   height: calc(100vh - 58px);
   min-height: 0;
   display: grid;
-  grid-template-rows: 30px 238px 28px minmax(0, 1fr);
+  grid-template-rows: 38px 30px 24px 220px 28px minmax(0, 1fr);
   overflow: hidden;
   padding: 0 10px 14px;
+}
+
+.graphSearch {
+  min-width: 0;
+  height: 30px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 3px;
+  margin: 0 1px 8px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-muted);
+}
+
+.graphSearch:focus-within {
+  border-color: var(--atria-blue);
+  box-shadow: 0 0 0 2px rgb(61 126 231 / 10%);
+}
+
+.graphSearch input {
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--atria-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.graphSearch button,
+.graphToolbar button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--atria-muted);
+}
+
+.graphSearch button:hover,
+.graphToolbar button:hover:not(:disabled) {
+  background: var(--atria-active);
+  color: var(--atria-text);
+}
+
+.graphToolbar {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 1px 8px;
+}
+
+.graphTypeFilters,
+.graphZoomControls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.graphToolbar .graphToolActive {
+  background: #e8f0fc;
+  color: #2f6fca;
+}
+
+.graphToolbarCount {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--atria-faint);
+  font-size: 9px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphToolbar button:disabled {
+  opacity: 0.32;
 }
 
 .graphScope {
@@ -1902,11 +1987,24 @@
 
 .documentGraphCanvas {
   width: 100%;
-  height: 238px;
+  height: 220px;
   display: block;
   border: 1px solid var(--atria-soft-line);
   border-radius: var(--atria-radius);
   background: #fbfbfa;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.documentGraphCanvas[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.graphCanvasEmpty {
+  fill: var(--atria-faint);
+  font-size: 10px;
+  letter-spacing: 0;
 }
 
 .graphLinkEdge,
