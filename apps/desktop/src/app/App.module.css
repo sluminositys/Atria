@@ -2913,7 +2913,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 58px 54px minmax(0, 1fr);
+  grid-template-rows: 58px 54px 50px minmax(0, 1fr);
   overflow: hidden;
   background: #fbfbfa;
 }
@@ -3058,6 +3058,67 @@
   gap: 8px;
   font-family: var(--atria-mono);
   font-size: 12px;
+}
+
+.historyRevisionMeta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(170px, 1.45fr) minmax(150px, 1fr) minmax(84px, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--atria-soft-line);
+  background: #f8f8f7;
+}
+
+.historyRevisionFact {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: var(--atria-muted);
+}
+
+.historyRevisionFact > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.historyRevisionFact small,
+.historyRevisionFact strong,
+.historyRevisionFact code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyRevisionFact small {
+  color: var(--atria-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.historyRevisionFact strong,
+.historyRevisionFact code {
+  color: var(--atria-text);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.historyRevisionFact code {
+  font-family: var(--atria-mono);
+}
+
+.historyRevisionMetaEmpty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--atria-muted);
+  font-size: 11px;
 }
 
 .historyNotice {
@@ -3329,6 +3390,10 @@
   .historyControls label {
     grid-template-columns: minmax(0, 1fr);
     gap: 2px;
+  }
+
+  .historyRevisionMeta {
+    grid-template-columns: minmax(78px, 0.65fr) minmax(120px, 1.2fr) minmax(116px, 1fr) minmax(70px, 0.55fr);
   }
 }
 
