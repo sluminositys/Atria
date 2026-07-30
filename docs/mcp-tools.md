@@ -47,7 +47,7 @@ For an installed build, point the Agent's stdio MCP configuration at `atria-mcp.
 
 `document_create` accepts `kind: "rich-document"` for editable semantic HTML or `kind: "html-artifact"` for a complete HTML report. For a rich document, `title` is rendered by Atria above `content`, so the body HTML should not repeat the title as its first heading. Editable nodes use stable `data-atria-id` attributes and provenance metadata. Agent identity can include `id`, `label`, `tool`, `model`, and `runId`; mutations can also include `transactionId` and `intent`.
 
-Agents should call `document_read` before editing and pass its `revision` back as `baseRevision`. A stale revision rejects the write instead of silently overwriting a human or another Agent's change.
+Agents must call `document_read` before replacing, patching, deleting, or restoring a document and pass its non-empty `revision.id` back as `baseRevision`. Missing and stale revisions reject the write instead of silently overwriting a human or another Agent's change.
 
 For focused edits, prefer `document_patch`:
 
