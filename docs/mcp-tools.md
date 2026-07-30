@@ -10,9 +10,9 @@ For a development checkout:
 corepack pnpm --silent mcp -- --workspace "D:\path\to\Atria Workspace"
 ```
 
-This prepares the release sidecar and leaves stdout reserved for MCP JSON-RPC. Agent configurations should then point directly at `apps/desktop/src-tauri/target/release/atria-mcp.exe`.
+This prepares both the release executable and the target-triple sidecar consumed by Tauri while leaving stdout reserved for MCP JSON-RPC. Agent configurations should then point directly at `apps/desktop/src-tauri/target/release/atria-mcp.exe`.
 
-For an installed build, point the Agent's stdio MCP configuration at `atria-mcp.exe` beside `Atria.exe`:
+For an installed build, point the Agent's stdio MCP configuration at the self-contained `atria-mcp.exe` installed beside `Atria.exe`:
 
 ```json
 {

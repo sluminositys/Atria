@@ -14,6 +14,14 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $source = Join-Path $tauriRoot "target\release\atria-mcp$extension"
+$targetTriple = (& rustc --print host-tuple).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetTriple)) {
+  throw "Failed to determine the Rust host target triple."
+}
+$bundleDirectory = Join-Path $tauriRoot "binaries"
+$destination = Join-Path $bundleDirectory "atria-mcp-$targetTriple$extension"
+New-Item -ItemType Directory -Force -Path $bundleDirectory | Out-Null
+Copy-Item -LiteralPath $source -Destination $destination -Force
 if (-not $Quiet) {
-  Write-Host "Prepared $source"
+  Write-Host "Prepared $destination"
 }
