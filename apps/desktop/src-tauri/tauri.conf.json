@@ -5,7 +5,7 @@
   "identifier": "app.atria.desktop",
   "build": {
     "beforeDevCommand": "corepack pnpm dev",
-    "beforeBuildCommand": "corepack pnpm build",
+    "beforeBuildCommand": "corepack pnpm sidecar:build && corepack pnpm build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "externalBin": ["binaries/atria-mcp"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
