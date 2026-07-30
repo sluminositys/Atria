@@ -135,7 +135,9 @@ pub fn atria_git_document_history(
   if walk.push_head().is_err() {
     return Ok(Vec::new());
   }
-  walk.set_sorting(Sort::TIME).map_err(|error| error.to_string())?;
+  walk
+    .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+    .map_err(|error| error.to_string())?;
   let mut revisions = Vec::new();
   for id in walk {
     let id = id.map_err(|error| error.to_string())?;
@@ -515,6 +517,16 @@ mod tests {
       Some("transaction-1".to_string()),
     )
     .expect("checkpoint document");
+    fs::write(root.join("note.html"), "<p>Changed again</p>").expect("change document again");
+    let second_checkpoint = atria_git_checkpoint(
+      Some(root.to_string_lossy().to_string()),
+      vec!["note.html".to_string()],
+      "Codex".to_string(),
+      Some("codex@atria.invalid".to_string()),
+      "Update result again".to_string(),
+      Some("transaction-2".to_string()),
+    )
+    .expect("checkpoint document again");
     let unchanged = atria_git_checkpoint(
       Some(root.to_string_lossy().to_string()),
       vec!["note.html".to_string()],
@@ -532,9 +544,11 @@ mod tests {
     .expect("document history");
 
     assert!(checkpoint.changed);
+    assert!(second_checkpoint.changed);
     assert!(!unchanged.changed);
-    assert_eq!(history.len(), 2);
-    assert_eq!(history[0].transaction_id.as_deref(), Some("transaction-1"));
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].transaction_id.as_deref(), Some("transaction-2"));
+    assert_eq!(history[1].transaction_id.as_deref(), Some("transaction-1"));
     assert_eq!(history[0].actor, "Codex");
 
     fs::remove_dir_all(root).expect("remove test workspace");

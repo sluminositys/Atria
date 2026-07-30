@@ -248,7 +248,7 @@ fn document_list(root: &Path) -> Result<Value, String> {
 
 fn document_read(root: &Path, arguments: &Value) -> Result<Value, String> {
   let relative = required_string(arguments, "path")?;
-  let path = safe_join(root, &relative)?;
+  let path = existing_document_path(root, &relative)?;
   let content = read_document_file(&path)?;
   Ok(json!({
     "path": relative,
@@ -310,7 +310,7 @@ fn document_replace(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: ReplaceDocumentInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
   ensure_base_revision(root, &input.path, &input.base_revision)?;
-  let path = safe_join(root, &input.path)?;
+  let path = existing_document_path(root, &input.path)?;
   let current = read_document_file(&path)?;
   let actor = input.actor.unwrap_or_default();
   let transaction_id = input
@@ -347,7 +347,7 @@ fn document_patch(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: PatchDocumentInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
   ensure_base_revision(root, &input.path, &input.base_revision)?;
-  let path = safe_join(root, &input.path)?;
+  let path = existing_document_path(root, &input.path)?;
   let current = read_document_file(&path)?;
   let next = apply_patches(current, &input.patches)?;
   write_document_file(&path, &next)?;
@@ -371,10 +371,8 @@ fn document_delete(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: MutationInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
   ensure_base_revision(root, &input.path, &input.base_revision)?;
-  let path = safe_join(root, &input.path)?;
-  if path.exists() {
-    fs::remove_file(&path).map_err(|error| error.to_string())?;
-  }
+  let path = existing_document_path(root, &input.path)?;
+  fs::remove_file(&path).map_err(|error| error.to_string())?;
   let actor = input.actor.unwrap_or_default();
   let transaction_id = input
     .transaction_id
@@ -724,7 +722,7 @@ fn collect_workspace_entries(
     let item = item.map_err(|error| error.to_string())?;
     let path = item.path();
     let name = item.file_name().to_string_lossy().to_string();
-    if current == root && (name == ".git" || name == ".atria") {
+    if current == root && (name == ".git" || name == ".atria" || name == ".gitignore") {
       continue;
     }
     let metadata = item.metadata().map_err(|error| error.to_string())?;
@@ -776,6 +774,15 @@ fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, String> {
     }
   }
   Ok(result)
+}
+
+fn existing_document_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+  let path = safe_join(root, relative)?;
+  if path.is_file() {
+    Ok(path)
+  } else {
+    Err(format!("Document not found: {relative}"))
+  }
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String, String> {
