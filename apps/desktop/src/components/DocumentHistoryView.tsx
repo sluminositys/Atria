@@ -3,14 +3,18 @@ import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Check,
+  Clock3,
   FileClock,
+  GitCommitHorizontal,
   GitCompareArrows,
   History,
   LoaderCircle,
+  MessageSquareText,
   RefreshCw,
   RotateCcw,
   Save,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import type { WorkspaceSnapshot } from "@atria/schema";
@@ -252,6 +256,22 @@ export function DocumentHistoryView({ snapshot, target, onRestored }: DocumentHi
         </div>
       </div>
 
+      <div className={styles.historyRevisionMeta} aria-label="Selected revision details">
+        {selectedRevision ? (
+          <>
+            <RevisionFact icon={UserRound} label="Actor" value={selectedRevision.actor || "Unknown actor"} />
+            <RevisionFact icon={MessageSquareText} label="Intent" value={selectedRevision.summary} />
+            <RevisionFact icon={Clock3} label="Time" value={formatRevisionTime(selectedRevision.timestamp)} />
+            <RevisionFact icon={GitCommitHorizontal} label="Revision" value={selectedRevision.shortId} mono />
+          </>
+        ) : (
+          <div className={styles.historyRevisionMetaEmpty}>
+            <GitCommitHorizontal size={14} />
+            <span>{historyLoading ? "Loading revision details" : "No revision selected"}</span>
+          </div>
+        )}
+      </div>
+
       {notice && <div className={styles.historyNotice} role="status"><Check size={14} /><span>{notice}</span></div>}
       {error ? (
         <div className={styles.historyError} role="alert">
@@ -291,6 +311,28 @@ export function DocumentHistoryView({ snapshot, target, onRestored }: DocumentHi
         />
       )}
     </section>
+  );
+}
+
+function RevisionFact({
+  icon: Icon,
+  label,
+  value,
+  mono = false,
+}: {
+  icon: typeof UserRound;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className={styles.historyRevisionFact} title={`${label}: ${value}`}>
+      <Icon size={14} />
+      <span>
+        <small>{label}</small>
+        {mono ? <code>{value}</code> : <strong>{value}</strong>}
+      </span>
+    </div>
   );
 }
 
@@ -476,6 +518,16 @@ function revisionLabel(revision: GitRevision | undefined): string {
   if (!revision) return "Empty document";
   const date = new Date(revision.timestamp * 1000);
   return `${revision.shortId} - ${revision.summary} - ${date.toLocaleString()}`;
+}
+
+function formatRevisionTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp * 1000));
 }
 
 function historySubtitle(kind: HistoryTarget["kind"], count: number): string {
