@@ -1820,6 +1820,60 @@
   text-align: center;
 }
 
+.searchError {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  margin: 0 10px 8px;
+  padding: 8px;
+  border: 1px solid #efd1d1;
+  border-radius: var(--atria-radius);
+  background: #fff8f7;
+  color: #9b2c2c;
+}
+
+.searchError > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.searchError strong,
+.searchError small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchError strong {
+  font-size: 10px;
+}
+
+.searchError small {
+  color: #9f5f5b;
+  font-size: 9px;
+}
+
+.searchError button {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid #e4bcbc;
+  border-radius: var(--atria-radius);
+  background: white;
+  color: #8d302d;
+  font-size: 10px;
+}
+
+.searchError button:hover {
+  background: #fff1f0;
+}
+
 .documentGraphPane {
   height: calc(100vh - 58px);
   min-height: 0;
@@ -2866,6 +2920,68 @@
 .emptyState {
   padding: 80px;
   color: var(--atria-muted);
+}
+
+.workspaceStartup,
+.appFailure {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  padding: 32px;
+  overflow: hidden;
+  background: #fbfbfa;
+  color: var(--atria-muted);
+}
+
+.workspaceStartup > span,
+.appFailure > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.workspaceStartup strong,
+.appFailure strong {
+  color: var(--atria-ink);
+  font-size: 14px;
+}
+
+.workspaceStartup small,
+.appFailure span {
+  color: var(--atria-muted);
+  font-size: 11px;
+}
+
+.workspaceStartup button,
+.appFailure button {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--atria-line);
+  border-radius: var(--atria-radius);
+  background: white;
+  color: var(--atria-text);
+  font-size: 11px;
+}
+
+.workspaceStartup button:hover,
+.appFailure button:hover {
+  background: var(--atria-hover);
+}
+
+.appFailure {
+  color: #9b2c2c;
+}
+
+.appFailure > div {
+  max-width: 420px;
 }
 
 .historySideSummary {
