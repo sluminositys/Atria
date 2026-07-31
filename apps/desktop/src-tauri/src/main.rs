@@ -113,7 +113,7 @@ fn collect_entries(root: &Path, current: &Path, entries: &mut Vec<WorkspaceEntry
     let item = item.map_err(|error| error.to_string())?;
     let path = item.path();
     let name = item.file_name().to_string_lossy().to_string();
-    if current == root && (name == ".atria" || name == ".git") {
+    if current == root && (name == ".atria" || name == ".git" || name == ".gitignore") {
       continue;
     }
 
@@ -580,7 +580,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
   use super::{
-    atria_create_workspace_directory, atria_move_path, atria_open_workspace_file,
+    atria_create_workspace_directory, atria_move_path, atria_open_workspace_file, collect_entries,
     atria_workspace_directory_status, atria_workspace_file_metadata, is_searchable_document,
     search_snippet, validate_workspace_name,
   };
@@ -592,6 +592,22 @@ mod tests {
     assert!(is_searchable_document("reports/result.HTML"));
     assert!(is_searchable_document("notes/summary.md"));
     assert!(!is_searchable_document("assets/chart.png"));
+  }
+
+  #[test]
+  fn hides_internal_workspace_control_files() {
+    let root = std::env::temp_dir().join(format!("atria-hidden-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join(".atria")).unwrap();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::write(root.join(".gitignore"), ".atria/cache/").unwrap();
+    fs::write(root.join("note.html"), "<p>Visible</p>").unwrap();
+    let mut entries = Vec::new();
+
+    collect_entries(&root, &root, &mut entries).unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].relative_path, "note.html");
+    fs::remove_dir_all(root).unwrap();
   }
 
   #[test]
