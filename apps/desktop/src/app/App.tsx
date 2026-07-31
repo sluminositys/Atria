@@ -109,6 +109,7 @@ export function App() {
   const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
   const [workspaceActionError, setWorkspaceActionError] = useState("");
   const allowNativeCloseRef = useRef(false);
+  const tabElementsRef = useRef(new Map<string, HTMLDivElement>());
 
   const requestCloseTab = useCallback((key: string) => {
     const tab = useAtriaStore.getState().tabs.find((item) => item.key === key);
@@ -128,6 +129,18 @@ export function App() {
       setSnapshot(query.data);
     }
   }, [query.data, setSnapshot]);
+
+  useEffect(() => {
+    if (!activeTabKey) return;
+    const frame = window.requestAnimationFrame(() => {
+      tabElementsRef.current.get(activeTabKey)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTabKey]);
 
   const requestWorkspaceChange = useCallback((nextSnapshot: WorkspaceSnapshot) => {
     const state = useAtriaStore.getState();
@@ -299,16 +312,26 @@ export function App() {
       </aside>
 
       <main className={styles.mainPane}>
-        <div className={styles.tabs}>
+        <div className={styles.tabs} role="tablist" aria-label="Open files">
           {tabs.map((tab) => (
             <div
               key={tab.key}
+              ref={(element) => {
+                if (element) tabElementsRef.current.set(tab.key, element);
+                else tabElementsRef.current.delete(tab.key);
+              }}
               className={tab.key === activeTabKey ? styles.tabActive : styles.tab}
               onAuxClick={(event) => {
                 if (event.button === 1) requestCloseTab(tab.key);
               }}
             >
-              <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
+              <button
+                className={styles.tabLabel}
+                role="tab"
+                aria-selected={tab.key === activeTabKey}
+                tabIndex={tab.key === activeTabKey ? 0 : -1}
+                onClick={() => openNode(tab.type, tab.id)}
+              >
                 <span>{tab.title}</span>
                 {tab.dirty && (
                   <i
