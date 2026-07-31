@@ -20,6 +20,7 @@ import {
   PanelTop,
   PenTool,
   Quote,
+  RefreshCw,
   Search,
   Settings,
   Sigma,
@@ -250,6 +251,14 @@ export function App() {
           kind: "html-artifact",
         }
       : undefined;
+
+  if (query.isPending && !snapshot) {
+    return <WorkspaceStartupState mode="loading" />;
+  }
+
+  if (query.isError && !snapshot) {
+    return <WorkspaceStartupState mode="error" onRetry={() => void query.refetch()} />;
+  }
 
   return (
     <div className={styles.shell}>
@@ -602,6 +611,19 @@ function SearchPane() {
             </button>
           )}
         </label>
+        {query && contentQuery.isError && (
+          <div className={styles.searchError} role="alert">
+            <AlertCircle size={15} />
+            <span>
+              <strong>Content search unavailable</strong>
+              <small>File names and tags are still shown.</small>
+            </span>
+            <button type="button" onClick={() => void contentQuery.refetch()}>
+              <RefreshCw size={13} />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
         {!query && recent.length > 0 && (
           <div className={styles.searchGroup}>
             <div className={styles.searchGroupLabel}>Recent</div>
@@ -639,6 +661,33 @@ function SearchPane() {
         </div>}
       </div>
     </>
+  );
+}
+
+function WorkspaceStartupState({ mode, onRetry }: { mode: "loading" | "error"; onRetry?: () => void }) {
+  if (mode === "loading") {
+    return (
+      <main className={styles.workspaceStartup} role="status" aria-live="polite">
+        <LoaderCircle className={styles.spin} size={19} />
+        <span>
+          <strong>Opening Atria</strong>
+          <small>Loading the local Workspace</small>
+        </span>
+      </main>
+    );
+  }
+  return (
+    <main className={styles.workspaceStartup} role="alert">
+      <AlertCircle size={20} />
+      <span>
+        <strong>Workspace could not be opened</strong>
+        <small>Check that the folder is available, then try again.</small>
+      </span>
+      <button type="button" onClick={onRetry}>
+        <RefreshCw size={14} />
+        <span>Try again</span>
+      </button>
+    </main>
   );
 }
 
