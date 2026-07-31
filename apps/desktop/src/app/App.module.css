@@ -481,9 +481,14 @@
   align-items: end;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
   padding-left: 18px;
   border-bottom: 1px solid var(--atria-line);
   background: #fbfbfa;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab,
