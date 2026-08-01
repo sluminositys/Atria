@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+#[allow(dead_code)]
 #[path = "../git_history.rs"]
 mod git_history;
 #[path = "../mcp_protocol.rs"]
