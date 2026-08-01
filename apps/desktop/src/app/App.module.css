@@ -3565,7 +3565,21 @@
 .tagEditor input {
   width: 92px;
   height: 24px;
-  padding: 0 4px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.tagEditor input:hover {
+  border-color: var(--atria-soft-line);
+  background: #fafaf9;
+}
+
+.tagEditor input:focus {
+  border-color: var(--atria-accent);
+  background: white;
+  outline: 2px solid color-mix(in srgb, var(--atria-accent) 14%, transparent);
 }
 
 .documentEditor {

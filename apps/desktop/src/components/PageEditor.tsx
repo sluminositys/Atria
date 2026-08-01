@@ -122,7 +122,8 @@ export function PageEditor({ page, artifacts, snapshot }: PageEditorProps) {
           ))}
           <input
             value={tagDraft}
-            placeholder="tag"
+            aria-label="Add document tag"
+            placeholder="Add tag"
             onChange={(event) => setTagDraft(event.target.value)}
             onBlur={addTag}
             onKeyDown={(event) => {
