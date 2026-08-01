@@ -63,6 +63,13 @@ export interface GitDocumentDiff {
 export interface AgentBridgeInfo {
   executablePath: string;
   available: boolean;
+  version: string;
+  toolCount: number;
+}
+
+export interface WorkspaceDirectoryStatus {
+  exists: boolean;
+  directory: boolean;
 }
 
 export interface WorkspaceContentMatch {
@@ -81,12 +88,24 @@ export async function getDefaultWorkspacePath(): Promise<string> {
   return invoke<string>("atria_default_workspace_path");
 }
 
-export async function pickWorkspaceDirectory(currentPath?: string): Promise<string | null> {
-  return invoke<string | null>("atria_pick_workspace_directory", { currentPath });
+export async function pickWorkspaceDirectory(currentPath?: string, purpose?: "open" | "create"): Promise<string | null> {
+  return invoke<string | null>("atria_pick_workspace_directory", { currentPath, purpose });
+}
+
+export async function getWorkspaceDirectoryStatus(path: string): Promise<WorkspaceDirectoryStatus> {
+  return invoke<WorkspaceDirectoryStatus>("atria_workspace_directory_status", { path });
+}
+
+export async function createWorkspaceDirectory(parentPath: string, name: string): Promise<string> {
+  return invoke<string>("atria_create_workspace_directory", { parentPath, name });
 }
 
 export async function getAgentBridgeInfo(): Promise<AgentBridgeInfo> {
   return invoke<AgentBridgeInfo>("atria_agent_bridge_info");
+}
+
+export async function quitApplication(): Promise<void> {
+  await invoke("atria_quit_app");
 }
 
 export async function searchWorkspace(
@@ -99,6 +118,13 @@ export async function searchWorkspace(
 
 export async function readWorkspaceTextFile(rootPath: string, relativePath: string): Promise<string> {
   return invoke<string>("atria_read_text_file", { rootPath, relativePath });
+}
+
+export async function getWorkspaceFileMetadata(
+  rootPath: string,
+  relativePath: string,
+): Promise<LocalWorkspaceEntry> {
+  return invoke<LocalWorkspaceEntry>("atria_workspace_file_metadata", { rootPath, relativePath });
 }
 
 export async function writeWorkspaceTextFile(

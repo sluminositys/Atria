@@ -11,7 +11,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 use std::time::UNIX_EPOCH;
-use tauri::tray::TrayIconBuilder;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager};
 
 mod git_history;
 
@@ -34,10 +36,21 @@ struct WorkspaceReadResult {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkspaceDirectoryStatus {
+  exists: bool,
+  directory: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AgentBridgeInfo {
   executable_path: String,
   available: bool,
+  version: String,
+  tool_count: usize,
 }
+
+const MCP_TOOL_COUNT: usize = 11;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,7 +113,7 @@ fn collect_entries(root: &Path, current: &Path, entries: &mut Vec<WorkspaceEntry
     let item = item.map_err(|error| error.to_string())?;
     let path = item.path();
     let name = item.file_name().to_string_lossy().to_string();
-    if current == root && (name == ".atria" || name == ".git") {
+    if current == root && (name == ".atria" || name == ".git" || name == ".gitignore") {
       continue;
     }
 
@@ -132,14 +145,77 @@ fn atria_default_workspace_path() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn atria_pick_workspace_directory(current_path: Option<String>) -> Option<String> {
-  let mut dialog = rfd::FileDialog::new().set_title("Open Atria workspace");
+fn atria_pick_workspace_directory(current_path: Option<String>, purpose: Option<String>) -> Option<String> {
+  let title = if purpose.as_deref() == Some("create") {
+    "Choose a parent folder for the new workspace"
+  } else {
+    "Open Atria workspace"
+  };
+  let mut dialog = rfd::FileDialog::new().set_title(title);
   if let Some(path) = current_path.filter(|path| !path.trim().is_empty()) {
     dialog = dialog.set_directory(path);
   }
   dialog
     .pick_folder()
     .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn validate_workspace_name(name: &str) -> Result<String, String> {
+  let clean = name.trim();
+  if clean.is_empty() {
+    return Err("Enter a workspace name.".to_string());
+  }
+  if clean.chars().count() > 80 {
+    return Err("Workspace names must be 80 characters or fewer.".to_string());
+  }
+  if clean == "." || clean == ".." || clean.ends_with(['.', ' ']) {
+    return Err("Choose a workspace name without trailing spaces or periods.".to_string());
+  }
+  if clean.chars().any(|character| character.is_control() || r#"<>:"/\|?*"#.contains(character)) {
+    return Err("The workspace name contains a character that is not allowed in folder names.".to_string());
+  }
+  let device_name = clean
+    .split('.')
+    .next()
+    .unwrap_or(clean)
+    .to_ascii_uppercase();
+  let reserved = matches!(device_name.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+    || (device_name.len() == 4
+      && (device_name.starts_with("COM") || device_name.starts_with("LPT"))
+      && matches!(device_name.as_bytes()[3], b'1'..=b'9'));
+  if reserved {
+    return Err("Choose a different workspace name.".to_string());
+  }
+  Ok(clean.to_string())
+}
+
+#[tauri::command]
+fn atria_workspace_directory_status(path: String) -> Result<WorkspaceDirectoryStatus, String> {
+  let clean = path.trim();
+  if clean.is_empty() {
+    return Err("Workspace location is empty.".to_string());
+  }
+  let location = PathBuf::from(clean);
+  if !location.exists() {
+    return Ok(WorkspaceDirectoryStatus { exists: false, directory: false });
+  }
+  let metadata = fs::metadata(location).map_err(|error| error.to_string())?;
+  Ok(WorkspaceDirectoryStatus { exists: true, directory: metadata.is_dir() })
+}
+
+#[tauri::command]
+fn atria_create_workspace_directory(parent_path: String, name: String) -> Result<String, String> {
+  let parent = PathBuf::from(parent_path.trim());
+  if !parent.is_dir() {
+    return Err("Choose an existing parent folder.".to_string());
+  }
+  let clean_name = validate_workspace_name(&name)?;
+  let destination = parent.join(clean_name);
+  if destination.exists() {
+    return Err("A file or folder with that name already exists.".to_string());
+  }
+  fs::create_dir(&destination).map_err(|error| error.to_string())?;
+  Ok(destination.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -165,7 +241,34 @@ fn atria_agent_bridge_info() -> Result<AgentBridgeInfo, String> {
   Ok(AgentBridgeInfo {
     available: candidate.is_file(),
     executable_path: candidate.to_string_lossy().into_owned(),
+    version: env!("CARGO_PKG_VERSION").to_string(),
+    tool_count: MCP_TOOL_COUNT,
   })
+}
+
+#[tauri::command]
+fn atria_quit_app(app: tauri::AppHandle) {
+  app.exit(0);
+}
+
+#[tauri::command]
+fn atria_request_app_quit(app: tauri::AppHandle) {
+  request_frontend_quit(&app);
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+  }
+}
+
+fn request_frontend_quit(app: &tauri::AppHandle) {
+  show_main_window(app);
+  if app.emit("atria://quit-requested", ()).is_err() {
+    app.exit(0);
+  }
 }
 
 #[tauri::command]
@@ -279,6 +382,35 @@ fn atria_read_text_file(root_path: Option<String>, relative_path: String) -> Res
 }
 
 #[tauri::command]
+fn atria_workspace_file_metadata(
+  root_path: Option<String>,
+  relative_path: String,
+) -> Result<WorkspaceEntry, String> {
+  let root = resolve_root(root_path)?;
+  let path = safe_join(&root, &relative_path)?;
+  let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+  if !metadata.is_file() {
+    return Err(format!("Workspace file does not exist: {relative_path}"));
+  }
+  let name = path
+    .file_name()
+    .map(|value| value.to_string_lossy().into_owned())
+    .ok_or_else(|| format!("Workspace file does not exist: {relative_path}"))?;
+  Ok(WorkspaceEntry {
+    name,
+    relative_path: relative_slash(&root, &path)?,
+    absolute_path: path.to_string_lossy().into_owned(),
+    kind: "file".to_string(),
+    size: metadata.len(),
+    modified_ms: metadata
+      .modified()
+      .ok()
+      .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+      .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64),
+  })
+}
+
+#[tauri::command]
 fn atria_read_text_prefix(
   root_path: Option<String>,
   relative_path: String,
@@ -386,9 +518,29 @@ fn main() {
   tauri::Builder::default()
     .setup(|app| {
       if let Some(icon) = app.default_window_icon().cloned() {
+        let show = MenuItem::with_id(app, "atria_tray_show", "Show Atria", true, None::<&str>)?;
+        let separator = PredefinedMenuItem::separator(app)?;
+        let quit = MenuItem::with_id(app, "atria_tray_quit", "Quit Atria", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&show, &separator, &quit])?;
         TrayIconBuilder::new()
           .icon(icon)
           .tooltip("Atria")
+          .menu(&menu)
+          .show_menu_on_left_click(false)
+          .on_menu_event(|app, event| match event.id().as_ref() {
+            "atria_tray_show" => show_main_window(app),
+            "atria_tray_quit" => request_frontend_quit(app),
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if matches!(
+              event,
+              TrayIconEvent::Click { button: MouseButton::Left, .. }
+                | TrayIconEvent::DoubleClick { button: MouseButton::Left, .. }
+            ) {
+              show_main_window(tray.app_handle());
+            }
+          })
           .build(app)?;
       }
       Ok(())
@@ -396,12 +548,17 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       atria_default_workspace_path,
       atria_pick_workspace_directory,
+      atria_workspace_directory_status,
+      atria_create_workspace_directory,
       atria_agent_bridge_info,
+      atria_request_app_quit,
+      atria_quit_app,
       atria_read_workspace,
       atria_search_workspace,
       atria_read_text_prefix,
       atria_write_workspace_snapshot,
       atria_read_text_file,
+      atria_workspace_file_metadata,
       atria_write_text_file,
       atria_create_directory,
       atria_move_path,
@@ -422,14 +579,35 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-  use super::{atria_move_path, atria_open_workspace_file, is_searchable_document, search_snippet};
+  use super::{
+    atria_create_workspace_directory, atria_move_path, atria_open_workspace_file, collect_entries,
+    atria_workspace_directory_status, atria_workspace_file_metadata, is_searchable_document,
+    search_snippet, validate_workspace_name,
+  };
   use std::fs;
+  use std::path::PathBuf;
 
   #[test]
   fn limits_search_to_document_formats() {
     assert!(is_searchable_document("reports/result.HTML"));
     assert!(is_searchable_document("notes/summary.md"));
     assert!(!is_searchable_document("assets/chart.png"));
+  }
+
+  #[test]
+  fn hides_internal_workspace_control_files() {
+    let root = std::env::temp_dir().join(format!("atria-hidden-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join(".atria")).unwrap();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::write(root.join(".gitignore"), ".atria/cache/").unwrap();
+    fs::write(root.join("note.html"), "<p>Visible</p>").unwrap();
+    let mut entries = Vec::new();
+
+    collect_entries(&root, &root, &mut entries).unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].relative_path, "note.html");
+    fs::remove_dir_all(root).unwrap();
   }
 
   #[test]
@@ -468,5 +646,64 @@ mod tests {
 
     assert!(error.contains("does not exist"));
     fs::remove_dir_all(root).unwrap();
+  }
+
+  #[test]
+  fn reads_metadata_for_a_real_workspace_file() {
+    let root = std::env::temp_dir().join(format!("atria-metadata-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("Assets")).unwrap();
+    fs::write(root.join("Assets").join("sample.bin"), [1_u8, 2, 3, 4]).unwrap();
+
+    let entry = atria_workspace_file_metadata(
+      Some(root.to_string_lossy().into_owned()),
+      "Assets/sample.bin".to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(entry.relative_path, "Assets/sample.bin");
+    assert_eq!(entry.size, 4);
+    assert_eq!(entry.kind, "file");
+    assert!(entry.modified_ms.is_some());
+    fs::remove_dir_all(root).unwrap();
+  }
+
+  #[test]
+  fn creates_a_named_workspace_without_materializing_its_contents() {
+    let parent = std::env::temp_dir().join(format!("atria-workspace-parent-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&parent).unwrap();
+
+    let created = atria_create_workspace_directory(
+      parent.to_string_lossy().into_owned(),
+      "Research Notes".to_string(),
+    )
+    .unwrap();
+    let created = PathBuf::from(created);
+    assert!(created.is_dir());
+    assert!(!created.join(".atria").exists());
+    assert!(atria_create_workspace_directory(
+      parent.to_string_lossy().into_owned(),
+      "Research Notes".to_string(),
+    )
+    .unwrap_err()
+    .contains("already exists"));
+
+    fs::remove_dir_all(parent).unwrap();
+  }
+
+  #[test]
+  fn reports_missing_workspaces_without_creating_them() {
+    let missing = std::env::temp_dir().join(format!("atria-missing-{}", uuid::Uuid::new_v4()));
+    let status = atria_workspace_directory_status(missing.to_string_lossy().into_owned()).unwrap();
+    assert!(!status.exists);
+    assert!(!status.directory);
+    assert!(!missing.exists());
+  }
+
+  #[test]
+  fn rejects_unsafe_or_reserved_workspace_names() {
+    for name in ["", "..", "report/2026", "draft.", "CON", "LPT1.txt"] {
+      assert!(validate_workspace_name(name).is_err(), "{name} should be rejected");
+    }
+    assert_eq!(validate_workspace_name("Atria Research").unwrap(), "Atria Research");
   }
 }

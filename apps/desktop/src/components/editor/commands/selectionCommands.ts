@@ -1,6 +1,6 @@
 import type { Content } from "@tiptap/core";
 import type { Editor } from "@tiptap/react";
-import { NodeSelection, TextSelection, type Selection } from "@tiptap/pm/state";
+import { AllSelection, NodeSelection, TextSelection, type Selection } from "@tiptap/pm/state";
 
 const siblingInsertionContainers = new Set([
   "table",
@@ -19,7 +19,7 @@ const siblingInsertionContainers = new Set([
 ]);
 
 export function hasTextSelection(selection: Selection): boolean {
-  return selection instanceof TextSelection && !selection.empty;
+  return !selection.empty && (selection instanceof TextSelection || selection instanceof AllSelection);
 }
 
 export function insertBlockAtSelection(editor: Editor, content: Content): boolean {

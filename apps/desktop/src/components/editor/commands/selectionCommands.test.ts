@@ -1,5 +1,5 @@
 import { Schema } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { AllSelection, NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import { hasTextSelection, siblingInsertionPosition } from "./selectionCommands";
 
@@ -19,13 +19,15 @@ const documentNode = schema.node("doc", null, [
 ]);
 
 describe("selection commands", () => {
-  it("only treats a non-empty text selection as formattable", () => {
+  it("treats selected text and a whole-document selection as formattable", () => {
     const cursor = TextSelection.create(documentNode, 2);
     const range = TextSelection.create(documentNode, 1, 4);
+    const all = new AllSelection(documentNode);
     const node = NodeSelection.create(documentNode, 7);
 
     expect(hasTextSelection(cursor)).toBe(false);
     expect(hasTextSelection(range)).toBe(true);
+    expect(hasTextSelection(all)).toBe(true);
     expect(hasTextSelection(node)).toBe(false);
   });
 

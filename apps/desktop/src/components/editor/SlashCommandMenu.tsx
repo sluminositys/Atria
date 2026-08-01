@@ -2,10 +2,12 @@ import { useEffect, useRef } from "react";
 import type { ComponentType } from "react";
 import {
   CheckSquare,
+  Clock3,
   Code2,
   PenTool,
   FileCode2,
   FileText,
+  Gauge,
   Hash,
   Image,
   PanelTop,
@@ -32,7 +34,9 @@ export type SlashCommand =
   | "inline-math"
   | "latex"
   | "html"
-  | "drawing";
+  | "drawing"
+  | "metric-card"
+  | "timeline";
 
 export interface SlashMenuState {
   x: number;
@@ -69,6 +73,8 @@ const commands: Array<{
   { command: "latex", label: "Display formula", group: "Media", icon: Sigma },
   { command: "html", label: "Custom HTML", group: "Media", icon: Code2 },
   { command: "drawing", label: "Drawing", group: "Media", icon: PenTool },
+  { command: "metric-card", label: "Metric", group: "AI Workspace", icon: Gauge },
+  { command: "timeline", label: "Timeline", group: "AI Workspace", icon: Clock3 },
 ];
 
 export function slashCommandCount(query = ""): number {

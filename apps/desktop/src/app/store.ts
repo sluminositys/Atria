@@ -15,11 +15,19 @@ import {
   importImageDataUrl,
   moveWorkspacePath,
   queueWorkspaceSave,
+  readWorkspaceTextFile,
   scheduleDocumentCheckpoint,
   writeWorkspaceTextFile,
 } from "./workspaceClient";
 import { existingRecentFiles } from "./workspaceNavigation";
 import { workspaceAssetFromEntry } from "./workspaceFiles";
+import {
+  isSourceDraftDirty,
+  persistSourceDraft,
+  type SourceDraft,
+  type SourceDraftSaveResult,
+} from "./sourceDrafts";
+import { mutateWorkspaceTag, normalizeTagName } from "./tagMutations";
 
 export type ActiveTool = "files" | "search" | "graph" | "tags" | "history" | "settings";
 export type TabType = "page" | "artifact" | "asset" | "timeline";
@@ -49,6 +57,7 @@ interface AtriaState {
   selectedFolderId: string;
   saveStatus: WorkspaceSaveStatus;
   saveError: string;
+  sourceDrafts: Record<string, SourceDraft>;
   snapshot?: WorkspaceSnapshot;
   tabs: WorkspaceTab[];
   setSnapshot(snapshot: WorkspaceSnapshot): void;
@@ -59,6 +68,9 @@ interface AtriaState {
   toggleFolder(folderId: string): void;
   openNode(type: TabType, id: string): void;
   closeTab(key: string): void;
+  setSourceDraft(draft: SourceDraft): void;
+  clearSourceDraft(key: string): void;
+  saveSourceDraft(key: string): Promise<SourceDraftSaveResult>;
   createFolder(parentFolderId?: string | null, name?: string): Promise<void>;
   renameFolder(folderId: string, name: string): Promise<void>;
   moveFolder(folderId: string, parentFolderId: string | null): Promise<void>;
@@ -68,6 +80,8 @@ interface AtriaState {
   renameNode(type: FileNodeType, id: string, name: string): Promise<void>;
   moveNode(type: FileNodeType, id: string, folderId: string | null): Promise<void>;
   updatePage(pageId: string, patch: Partial<Page>): void;
+  renameTag(currentTag: string, nextTag: string): Promise<void>;
+  deleteTag(tag: string): Promise<void>;
   deleteNode(type: FileNodeType, id: string): Promise<void>;
   addBlock(type: AtriaBlockType, options?: AddBlockOptions): void;
   addImageFromDataUrl(dataUrl: string, pageId?: string, afterBlockId?: string): Promise<void>;
@@ -288,6 +302,27 @@ function movedWorkspacePaths(
   );
 }
 
+function retainDraftsForTabs(
+  drafts: Record<string, SourceDraft>,
+  tabs: WorkspaceTab[],
+): Record<string, SourceDraft> {
+  const tabKeys = new Set(tabs.map((tab) => tab.key));
+  return Object.fromEntries(Object.entries(drafts).filter(([key]) => tabKeys.has(key)));
+}
+
+function remapSourceDraftPaths(
+  drafts: Record<string, SourceDraft>,
+  fromPath: string,
+  toPath: string,
+): Record<string, SourceDraft> {
+  return Object.fromEntries(
+    Object.entries(drafts).map(([key, draft]) => [
+      key,
+      { ...draft, filePath: replaceWorkspacePath(draft.filePath, fromPath, toPath) ?? draft.filePath },
+    ]),
+  );
+}
+
 export const useAtriaStore = create<AtriaState>((set, get) => ({
   activeTool: "files",
   activeTabKey: "",
@@ -297,6 +332,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
   selectedFolderId: "",
   saveStatus: "idle",
   saveError: "",
+  sourceDrafts: {},
   tabs: [],
 
   setSnapshot(nextSnapshot) {
@@ -306,7 +342,14 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       settings: { ...nextSnapshot.settings, recentFiles },
     };
     set((state) => {
-      const tabs = state.tabs
+      const workspaceChanged = Boolean(state.snapshot)
+        && !sameWorkspacePath(state.snapshot?.settings.workspacePath, snapshot.settings.workspacePath);
+      if (workspaceChanged && Object.values(state.sourceDrafts).some(isSourceDraftDirty)) {
+        console.error("Blocked a workspace change while source drafts are unsaved.");
+        return state;
+      }
+      const sourceDrafts = workspaceChanged ? {} : state.sourceDrafts;
+      const tabs = (workspaceChanged ? [] : state.tabs)
         .map((tab) => {
           const exists =
             tab.type === "artifact"
@@ -317,7 +360,12 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
                 ? snapshot.timeline.some((item) => item.id === tab.id)
                 : snapshot.pages.some((item) => item.id === tab.id);
           return exists
-            ? { ...tab, title: titleFor(snapshot, tab.type, tab.id), source: sourceFor(snapshot, tab.type, tab.id) }
+            ? {
+                ...tab,
+                title: titleFor(snapshot, tab.type, tab.id),
+                source: sourceFor(snapshot, tab.type, tab.id),
+                dirty: isSourceDraftDirty(sourceDrafts[tab.key]),
+              }
             : null;
         })
         .filter(Boolean) as WorkspaceTab[];
@@ -366,9 +414,11 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       return {
         snapshot,
         tabs,
-        selectedFolderId: snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
+        sourceDrafts: retainDraftsForTabs(sourceDrafts, tabs),
+        selectedFolderId: !workspaceChanged && snapshot.folders.some((folder) => folder.id === state.selectedFolderId)
           ? state.selectedFolderId
           : snapshot.folders[0]?.id || "",
+        filter: workspaceChanged ? "" : state.filter,
         activeTabKey,
         activeBlockId,
         activeBlockPageId: activeBlockId && activePage ? activePage.id : undefined,
@@ -463,8 +513,65 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
         state.activeTabKey === key
           ? (tabs[index]?.key ?? tabs[index - 1]?.key ?? tabs[0]?.key ?? "")
           : state.activeTabKey;
-      return { tabs, activeTabKey: nextActive };
+      const sourceDrafts = { ...state.sourceDrafts };
+      delete sourceDrafts[key];
+      return { tabs, activeTabKey: nextActive, sourceDrafts };
     });
+  },
+
+  setSourceDraft(draft) {
+    set((state) => ({
+      sourceDrafts: { ...state.sourceDrafts, [draft.key]: draft },
+      tabs: state.tabs.map((tab) =>
+        tab.key === draft.key ? { ...tab, dirty: isSourceDraftDirty(draft) } : tab,
+      ),
+    }));
+  },
+
+  clearSourceDraft(key) {
+    set((state) => {
+      const sourceDrafts = { ...state.sourceDrafts };
+      delete sourceDrafts[key];
+      return {
+        sourceDrafts,
+        tabs: state.tabs.map((tab) => tab.key === key ? { ...tab, dirty: false } : tab),
+      };
+    });
+  },
+
+  async saveSourceDraft(key) {
+    const state = get();
+    const draft = state.sourceDrafts[key];
+    const rootPath = state.snapshot?.settings.workspacePath;
+    if (!draft || !rootPath) {
+      return { status: "error", message: "No local source draft is available to save." };
+    }
+    if (!isSourceDraftDirty(draft)) return { status: "saved", savedSource: draft.source };
+
+    const result = await persistSourceDraft(draft, {
+      read: () => readWorkspaceTextFile(rootPath, draft.filePath),
+      write: (source) => writeWorkspaceTextFile(rootPath, draft.filePath, source),
+      checkpoint: async () => {
+        await checkpointWorkspacePaths(rootPath, [draft.filePath], `Edit ${draft.title}`, {
+          actorName: "Local user",
+          transactionId: crypto.randomUUID(),
+        });
+      },
+    });
+    if (result.status !== "saved") return result;
+
+    set((current) => {
+      const latest = current.sourceDrafts[key];
+      if (!latest) return current;
+      const savedDraft = { ...latest, baselineSource: result.savedSource };
+      return {
+        sourceDrafts: { ...current.sourceDrafts, [key]: savedDraft },
+        tabs: current.tabs.map((tab) =>
+          tab.key === key ? { ...tab, dirty: isSourceDraftDirty(savedDraft) } : tab,
+        ),
+      };
+    });
+    return result;
   },
 
   async createFolder(parentFolderId = get().selectedFolderId || null, name = "New Folder") {
@@ -493,17 +600,22 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const snapshot = get().snapshot;
     const folder = snapshot?.folders.find((item) => item.id === folderId);
     if (!snapshot || !folder?.path) return;
+    const folderPath = folder.path;
     const cleanName = cleanWorkspaceName(name, folder.name);
-    const destination = joinWorkspacePath(workspaceParentPath(folder.path), cleanName);
-    if (destination === folder.path) return;
+    const destination = joinWorkspacePath(workspaceParentPath(folderPath), cleanName);
+    if (destination === folderPath) return;
     await queueWorkspaceSave(snapshot);
-    await moveWorkspacePath(snapshot, folder.path, destination);
-    const next = remapFolderSnapshot(snapshot, folderId, folder.parentId, folder.path, destination);
-    set({ snapshot: next, selectedFolderId: folderId });
+    await moveWorkspacePath(snapshot, folderPath, destination);
+    const next = remapFolderSnapshot(snapshot, folderId, folder.parentId, folderPath, destination);
+    set((state) => ({
+      snapshot: next,
+      selectedFolderId: folderId,
+      sourceDrafts: remapSourceDraftPaths(state.sourceDrafts, folderPath, destination),
+    }));
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
-      movedWorkspacePaths(snapshot, next, folder.path),
+      movedWorkspacePaths(snapshot, next, folderPath),
       `Rename folder ${folder.name} to ${cleanName}`,
       { actorName: "Local user", transactionId: crypto.randomUUID() },
     );
@@ -514,17 +626,22 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     const folder = snapshot?.folders.find((item) => item.id === folderId);
     const parent = parentFolderId ? snapshot?.folders.find((item) => item.id === parentFolderId) : undefined;
     if (!snapshot || !folder?.path || parentFolderId === folderId) return;
-    if (parent?.path && (parent.path === folder.path || parent.path.startsWith(`${folder.path}/`))) return;
+    const folderPath = folder.path;
+    if (parent?.path && (parent.path === folderPath || parent.path.startsWith(`${folderPath}/`))) return;
     const destination = joinWorkspacePath(parent?.path, folder.name);
-    if (destination === folder.path) return;
+    if (destination === folderPath) return;
     await queueWorkspaceSave(snapshot);
-    await moveWorkspacePath(snapshot, folder.path, destination);
-    const next = remapFolderSnapshot(snapshot, folderId, parent?.id ?? null, folder.path, destination);
-    set({ snapshot: next, selectedFolderId: folderId });
+    await moveWorkspacePath(snapshot, folderPath, destination);
+    const next = remapFolderSnapshot(snapshot, folderId, parent?.id ?? null, folderPath, destination);
+    set((state) => ({
+      snapshot: next,
+      selectedFolderId: folderId,
+      sourceDrafts: remapSourceDraftPaths(state.sourceDrafts, folderPath, destination),
+    }));
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
-      movedWorkspacePaths(snapshot, next, folder.path),
+      movedWorkspacePaths(snapshot, next, folderPath),
       `Move folder ${folder.name}`,
       { actorName: "Local user", transactionId: crypto.randomUUID() },
     );
@@ -565,6 +682,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     set({
       snapshot: next,
       tabs,
+      sourceDrafts: retainDraftsForTabs(get().sourceDrafts, tabs),
       activeTabKey: tabs[0]?.key ?? "",
       activeBlockId: undefined,
       activeBlockPageId: undefined,
@@ -722,6 +840,16 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     set((state) => ({
       snapshot: next,
       tabs: state.tabs.map((tab) => (tab.type === type && tab.id === id ? { ...tab, title: nextTitle } : tab)),
+      sourceDrafts: state.sourceDrafts[nodeKey(type, id)]
+        ? {
+            ...state.sourceDrafts,
+            [nodeKey(type, id)]: {
+              ...state.sourceDrafts[nodeKey(type, id)]!,
+              title: nextTitle,
+              filePath: destination,
+            },
+          }
+        : state.sourceDrafts,
     }));
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
@@ -770,7 +898,16 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
       ),
       updatedAt: nowIso(),
     };
-    set({ snapshot: next, selectedFolderId: folder?.id ?? "" });
+    set((state) => ({
+      snapshot: next,
+      selectedFolderId: folder?.id ?? "",
+      sourceDrafts: state.sourceDrafts[nodeKey(type, id)]
+        ? {
+            ...state.sourceDrafts,
+            [nodeKey(type, id)]: { ...state.sourceDrafts[nodeKey(type, id)]!, filePath: destination },
+          }
+        : state.sourceDrafts,
+    }));
     await queueWorkspaceSave(next);
     await checkpointWorkspacePaths(
       next.settings.workspacePath,
@@ -808,6 +945,51 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     });
   },
 
+  async renameTag(currentTag, nextTag) {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const normalized = normalizeTagName(nextTag);
+    if (!normalized) throw new Error("Enter a tag name.");
+    const mutation = mutateWorkspaceTag(snapshot, currentTag, normalized);
+    if (!mutation.changed) return;
+    set({ snapshot: mutation.snapshot });
+    persist(mutation.snapshot);
+    try {
+      await queueWorkspaceSave(mutation.snapshot);
+      await checkpointWorkspacePaths(
+        mutation.snapshot.settings.workspacePath,
+        [...mutation.changedPaths, ".atria/workspace.json"],
+        `Rename tag ${normalizeTagName(currentTag)} to ${normalized}`,
+        { actorName: "Local user", transactionId: crypto.randomUUID() },
+      );
+    } catch (error) {
+      set({ saveStatus: "error", saveError: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  },
+
+  async deleteTag(tag) {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const normalized = normalizeTagName(tag);
+    const mutation = mutateWorkspaceTag(snapshot, normalized);
+    if (!mutation.changed) return;
+    set({ snapshot: mutation.snapshot });
+    persist(mutation.snapshot);
+    try {
+      await queueWorkspaceSave(mutation.snapshot);
+      await checkpointWorkspacePaths(
+        mutation.snapshot.settings.workspacePath,
+        [...mutation.changedPaths, ".atria/workspace.json"],
+        `Delete tag ${normalized}`,
+        { actorName: "Local user", transactionId: crypto.randomUUID() },
+      );
+    } catch (error) {
+      set({ saveStatus: "error", saveError: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  },
+
   async deleteNode(type, id) {
     const snapshot = get().snapshot;
     if (!snapshot) return;
@@ -840,6 +1022,7 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     set({
       snapshot: next,
       tabs,
+      sourceDrafts: retainDraftsForTabs(get().sourceDrafts, tabs),
       activeTabKey: tabs.some((tab) => tab.key === get().activeTabKey)
         ? get().activeTabKey
         : (tabs[0]?.key ?? ""),
@@ -946,6 +1129,11 @@ export const useAtriaStore = create<AtriaState>((set, get) => ({
     persist(get().snapshot);
   },
 }));
+
+function sameWorkspacePath(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) return left === right;
+  return left.trim().replace(/[\\/]+$/, "").toLowerCase() === right.trim().replace(/[\\/]+$/, "").toLowerCase();
+}
 
 export function getActiveTab(state: Pick<AtriaState, "activeTabKey" | "tabs">): WorkspaceTab | undefined {
   return state.tabs.find((tab) => tab.key === state.activeTabKey);

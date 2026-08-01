@@ -53,7 +53,7 @@ struct ReplaceDocumentInput {
   content: String,
   title: Option<String>,
   tags: Option<Vec<String>>,
-  base_revision: Option<String>,
+  base_revision: String,
   transaction_id: Option<String>,
   intent: Option<String>,
   actor: Option<AgentActor>,
@@ -64,7 +64,7 @@ struct ReplaceDocumentInput {
 struct PatchDocumentInput {
   path: String,
   patches: Vec<DocumentPatch>,
-  base_revision: Option<String>,
+  base_revision: String,
   transaction_id: Option<String>,
   intent: Option<String>,
   actor: Option<AgentActor>,
@@ -95,7 +95,7 @@ enum DocumentPatch {
 #[serde(rename_all = "camelCase")]
 struct MutationInput {
   path: String,
-  base_revision: Option<String>,
+  base_revision: String,
   transaction_id: Option<String>,
   intent: Option<String>,
   actor: Option<AgentActor>,
@@ -248,7 +248,7 @@ fn document_list(root: &Path) -> Result<Value, String> {
 
 fn document_read(root: &Path, arguments: &Value) -> Result<Value, String> {
   let relative = required_string(arguments, "path")?;
-  let path = safe_join(root, &relative)?;
+  let path = existing_document_path(root, &relative)?;
   let content = read_document_file(&path)?;
   Ok(json!({
     "path": relative,
@@ -309,8 +309,8 @@ fn document_create(root: &Path, arguments: Value) -> Result<Value, String> {
 fn document_replace(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: ReplaceDocumentInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
-  ensure_base_revision(root, &input.path, input.base_revision.as_deref())?;
-  let path = safe_join(root, &input.path)?;
+  ensure_base_revision(root, &input.path, &input.base_revision)?;
+  let path = existing_document_path(root, &input.path)?;
   let current = read_document_file(&path)?;
   let actor = input.actor.unwrap_or_default();
   let transaction_id = input
@@ -346,8 +346,8 @@ fn document_replace(root: &Path, arguments: Value) -> Result<Value, String> {
 fn document_patch(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: PatchDocumentInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
-  ensure_base_revision(root, &input.path, input.base_revision.as_deref())?;
-  let path = safe_join(root, &input.path)?;
+  ensure_base_revision(root, &input.path, &input.base_revision)?;
+  let path = existing_document_path(root, &input.path)?;
   let current = read_document_file(&path)?;
   let next = apply_patches(current, &input.patches)?;
   write_document_file(&path, &next)?;
@@ -370,11 +370,9 @@ fn document_patch(root: &Path, arguments: Value) -> Result<Value, String> {
 fn document_delete(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: MutationInput =
     serde_json::from_value(arguments).map_err(|error| error.to_string())?;
-  ensure_base_revision(root, &input.path, input.base_revision.as_deref())?;
-  let path = safe_join(root, &input.path)?;
-  if path.exists() {
-    fs::remove_file(&path).map_err(|error| error.to_string())?;
-  }
+  ensure_base_revision(root, &input.path, &input.base_revision)?;
+  let path = existing_document_path(root, &input.path)?;
+  fs::remove_file(&path).map_err(|error| error.to_string())?;
   let actor = input.actor.unwrap_or_default();
   let transaction_id = input
     .transaction_id
@@ -424,6 +422,7 @@ fn document_diff(root: &Path, arguments: &Value) -> Result<Value, String> {
 fn document_restore(root: &Path, arguments: Value) -> Result<Value, String> {
   let input: MutationInput =
     serde_json::from_value(arguments.clone()).map_err(|error| error.to_string())?;
+  ensure_base_revision(root, &input.path, &input.base_revision)?;
   let revision = required_string(&arguments, "revision")?;
   let actor = input.actor.unwrap_or_default();
   let transaction_id = input
@@ -530,10 +529,10 @@ fn checkpoint(
   serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
-fn ensure_base_revision(root: &Path, path: &str, expected: Option<&str>) -> Result<(), String> {
-  let Some(expected) = expected else {
-    return Ok(());
-  };
+fn ensure_base_revision(root: &Path, path: &str, expected: &str) -> Result<(), String> {
+  if expected.trim().is_empty() {
+    return Err("baseRevision must be the non-empty revision returned by document_read".to_string());
+  }
   let current = latest_revision(root, path)?
     .and_then(|revision| revision.get("id").and_then(Value::as_str).map(String::from));
   if current.as_deref() == Some(expected) {
@@ -723,7 +722,7 @@ fn collect_workspace_entries(
     let item = item.map_err(|error| error.to_string())?;
     let path = item.path();
     let name = item.file_name().to_string_lossy().to_string();
-    if current == root && (name == ".git" || name == ".atria") {
+    if current == root && (name == ".git" || name == ".atria" || name == ".gitignore") {
       continue;
     }
     let metadata = item.metadata().map_err(|error| error.to_string())?;
@@ -775,6 +774,15 @@ fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, String> {
     }
   }
   Ok(result)
+}
+
+fn existing_document_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+  let path = safe_join(root, relative)?;
+  if path.is_file() {
+    Ok(path)
+  } else {
+    Err(format!("Document not found: {relative}"))
+  }
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String, String> {
@@ -833,12 +841,12 @@ fn tool_definitions() -> Vec<Value> {
         "transactionId": { "type": "string" }, "intent": { "type": "string" }, "actor": actor_schema()
       }, "required": ["path", "title", "content"]
     })),
-    tool("document_replace", "Replace a complete HTML artifact or the body below a rich-document title and commit the result. Pass baseRevision for optimistic concurrency.", mutation_schema(json!({ "content": { "type": "string" }, "title": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } } }), vec!["path", "content"])),
-    tool("document_patch", "Apply exact text or data-atria-id stable-node HTML patches and commit the result.", mutation_schema(json!({ "patches": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["replace-text", "replace-node", "insert-after"] }, "search": { "type": "string" }, "replacement": { "type": "string" }, "expectedOccurrences": { "type": "integer", "minimum": 1 }, "nodeId": { "type": "string" }, "html": { "type": "string" } }, "required": ["type"] } } }), vec!["path", "patches"])),
-    tool("document_delete", "Delete a document and commit the deletion.", mutation_schema(json!({}), vec!["path"])),
+    tool("document_replace", "Replace a complete HTML artifact or the body below a rich-document title and commit the result. Requires the baseRevision returned by document_read.", mutation_schema(json!({ "content": { "type": "string" }, "title": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } } }), vec!["path", "content", "baseRevision"])),
+    tool("document_patch", "Apply exact text or data-atria-id stable-node HTML patches and commit the result. Requires the baseRevision returned by document_read.", mutation_schema(json!({ "patches": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["replace-text", "replace-node", "insert-after"] }, "search": { "type": "string" }, "replacement": { "type": "string" }, "expectedOccurrences": { "type": "integer", "minimum": 1 }, "nodeId": { "type": "string" }, "html": { "type": "string" } }, "required": ["type"] } } }), vec!["path", "patches", "baseRevision"])),
+    tool("document_delete", "Delete a document and commit the deletion. Requires the baseRevision returned by document_read.", mutation_schema(json!({}), vec!["path", "baseRevision"])),
     tool("document_history", "List document-level Git revisions with actor and transaction provenance.", json!({ "type": "object", "properties": { "path": { "type": "string" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["path"] })),
     tool("document_diff", "Read a unified diff for one document between two revisions.", json!({ "type": "object", "properties": { "path": { "type": "string" }, "fromRevision": { "type": "string" }, "toRevision": { "type": "string" } }, "required": ["path"] })),
-    tool("document_restore", "Restore one historical document revision as a new agent commit.", mutation_schema(json!({ "revision": { "type": "string" } }), vec!["path", "revision"])),
+    tool("document_restore", "Restore one historical document revision as a new agent commit. Requires the current baseRevision returned by document_read.", mutation_schema(json!({ "revision": { "type": "string" } }), vec!["path", "revision", "baseRevision"])),
   ]
 }
 
@@ -948,6 +956,7 @@ mod tests {
   #[test]
   fn tool_contract_names_the_editor_body_and_stable_id() {
     let tools = tool_definitions();
+    assert_eq!(tools.len(), 11);
     let create = tools
       .iter()
       .find(|tool| tool["name"] == "document_create")
@@ -967,5 +976,13 @@ mod tests {
       .as_str()
       .unwrap()
       .contains("data-atria-id"));
+    for name in ["document_replace", "document_patch", "document_delete", "document_restore"] {
+      let mutation = tools.iter().find(|tool| tool["name"] == name).unwrap();
+      assert!(mutation["inputSchema"]["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|field| field == "baseRevision"));
+    }
   }
 }

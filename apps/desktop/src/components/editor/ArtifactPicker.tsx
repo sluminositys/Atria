@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { FileCode2, Search, X } from "lucide-react";
 import type { Artifact } from "@atria/schema";
 import styles from "../../app/App.module.css";
@@ -6,12 +7,16 @@ import styles from "../../app/App.module.css";
 interface ArtifactPickerProps {
   artifacts: Artifact[];
   open: boolean;
+  title?: string;
   onClose(): void;
   onSelect(artifact: Artifact): void;
 }
 
-export function ArtifactPicker({ artifacts, open, onClose, onSelect }: ArtifactPickerProps) {
+export function ArtifactPicker({ artifacts, open, title = "Insert Artifact", onClose, onSelect }: ArtifactPickerProps) {
   const [query, setQuery] = useState("");
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const titleId = useId();
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return artifacts
@@ -26,28 +31,78 @@ export function ArtifactPicker({ artifacts, open, onClose, onSelect }: ArtifactP
       .slice(0, 24);
   }, [artifacts, query]);
 
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => searchRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [open]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [],
+    );
+    if (!controls.length) return;
+    const first = controls[0]!;
+    const last = controls.at(-1)!;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className={styles.dialogBackdrop} onMouseDown={onClose}>
-      <section className={styles.artifactPicker} onMouseDown={(event) => event.stopPropagation()}>
+      <section
+        ref={dialogRef}
+        className={styles.artifactPicker}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onKeyDown={handleKeyDown}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <header>
           <div>
-            <strong>Insert Artifact</strong>
-            <span>{artifacts.length ? "Choose an HTML result from this workspace" : "Current workspace has no artifact"}</span>
+            <strong id={titleId}>{title}</strong>
+            <span>{artifacts.length} {artifacts.length === 1 ? "HTML result" : "HTML results"}</span>
           </div>
-          <button title="Close" onClick={onClose}>
+          <button type="button" aria-label="Close Artifact picker" title="Close" onClick={onClose}>
             <X size={16} />
           </button>
         </header>
         <label className={styles.pickerSearch}>
           <Search size={15} />
-          <input value={query} placeholder="Search artifact" onChange={(event) => setQuery(event.target.value)} autoFocus />
+          <input
+            ref={searchRef}
+            value={query}
+            aria-label="Search HTML results"
+            placeholder="Search HTML results"
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </label>
         <div className={styles.pickerList}>
           {results.length ? (
             results.map((artifact) => (
               <button
+                type="button"
                 key={artifact.id}
                 onClick={() => {
                   onSelect(artifact);
@@ -57,16 +112,17 @@ export function ArtifactPicker({ artifacts, open, onClose, onSelect }: ArtifactP
                 <FileCode2 size={16} />
                 <span>
                   <strong>{artifact.title}</strong>
-                  <small>{artifact.filePath ?? artifact.description ?? artifact.updatedAt}</small>
+                  <small>{artifact.description || artifact.tags.join(" / ") || "HTML result"}</small>
                 </span>
                 <time>{new Date(artifact.updatedAt).toLocaleDateString()}</time>
               </button>
             ))
           ) : (
-            <div className={styles.dialogEmpty}>当前 workspace 没有 artifact</div>
+            <div className={styles.dialogEmpty}>No matching HTML results</div>
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

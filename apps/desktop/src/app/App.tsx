@@ -1,16 +1,18 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import {
   Box,
   AlertCircle,
   Bot,
   Check,
   CheckSquare,
+  Clock3,
   Code2,
   FileCode2,
   FileText,
   GitBranch,
-  Hash,
   History as HistoryIcon,
   Image,
   Info,
@@ -18,23 +20,33 @@ import {
   PanelTop,
   PenTool,
   Quote,
+  RefreshCw,
   Search,
   Settings,
   Sigma,
   Table2,
   Tags,
   FolderOpen,
+  Gauge,
   X,
 } from "lucide-react";
 import { AtriaBlockType, WorkspaceSnapshot } from "@atria/schema";
-import { loadWorkspace, searchWorkspace } from "./workspaceClient";
+import { getWorkspaceDirectoryStatus, loadWorkspace, quitApplication, searchWorkspace } from "./workspaceClient";
 import { ActiveTool, getActiveTab, useAtriaStore } from "./store";
 import { existingRecentFiles, relativeTimeLabel } from "./workspaceNavigation";
+import { readActiveWorkspacePath, sameWorkspacePath, setActiveWorkspacePath } from "./workspacePreferences";
 import { FileTree } from "../components/FileTree";
 import { DocumentGraphPane } from "../components/DocumentGraphPane";
+import { TagsPane } from "../components/TagsPane";
 import { WorkspaceSettingsView } from "../components/WorkspaceSettingsView";
 import type { HistoryTarget } from "../components/DocumentHistoryView";
+import { UnsavedChangesDialog } from "../components/UnsavedChangesDialog";
+import { UnsavedWorkspaceDialog } from "../components/UnsavedWorkspaceDialog";
 import styles from "./App.module.css";
+
+type PendingWorkspaceAction =
+  | { intent: "switch"; snapshot: WorkspaceSnapshot }
+  | { intent: "close" | "quit" };
 
 const PageEditor = lazy(() => import("../components/PageEditor").then((module) => ({ default: module.PageEditor })));
 const ArtifactPreview = lazy(() => import("../components/ArtifactPreview").then((module) => ({ default: module.ArtifactPreview })));
@@ -66,12 +78,14 @@ const blockPalette: Array<{
   { type: "latex", label: "LaTeX", icon: Sigma },
   { type: "custom-html", label: "HTML", icon: Code2 },
   { type: "drawing", label: "Drawing", icon: PenTool },
+  { type: "metric-card", label: "Metric", icon: Gauge },
+  { type: "timeline", label: "Timeline", icon: Clock3 },
 ];
 
 export function App() {
   const query = useQuery({
     queryKey: ["workspace"],
-    queryFn: () => loadWorkspace(),
+    queryFn: loadInitialWorkspace,
   });
   const {
     activeTool,
@@ -85,18 +99,123 @@ export function App() {
     saveStatus,
     saveError,
     retrySave,
+    saveSourceDraft,
+    clearSourceDraft,
   } = useAtriaStore();
+  const [pendingCloseKey, setPendingCloseKey] = useState("");
+  const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState("");
+  const [pendingWorkspaceAction, setPendingWorkspaceAction] = useState<PendingWorkspaceAction>();
+  const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState("");
+  const allowNativeCloseRef = useRef(false);
+  const tabElementsRef = useRef(new Map<string, HTMLDivElement>());
+
+  const requestCloseTab = useCallback((key: string) => {
+    const tab = useAtriaStore.getState().tabs.find((item) => item.key === key);
+    if (!tab) return;
+    if (!tab.dirty) {
+      closeTab(key);
+      return;
+    }
+    setCloseError("");
+    setCloseBusy(false);
+    setPendingCloseKey(key);
+  }, [closeTab]);
 
   useEffect(() => {
-    if (query.data) setSnapshot(query.data);
+    if (query.data) {
+      setActiveWorkspacePath(query.data.settings.workspacePath);
+      setSnapshot(query.data);
+    }
   }, [query.data, setSnapshot]);
+
+  useEffect(() => {
+    if (!activeTabKey) return;
+    const frame = window.requestAnimationFrame(() => {
+      tabElementsRef.current.get(activeTabKey)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTabKey]);
+
+  const requestWorkspaceChange = useCallback((nextSnapshot: WorkspaceSnapshot) => {
+    const state = useAtriaStore.getState();
+    if (sameWorkspacePath(state.snapshot?.settings.workspacePath, nextSnapshot.settings.workspacePath)) {
+      setActiveWorkspacePath(nextSnapshot.settings.workspacePath);
+      setSnapshot(nextSnapshot);
+      return;
+    }
+    if (!state.tabs.some((tab) => tab.dirty)) {
+      setActiveWorkspacePath(nextSnapshot.settings.workspacePath);
+      setSnapshot(nextSnapshot);
+      return;
+    }
+    setPendingCloseKey("");
+    setCloseError("");
+    setWorkspaceActionBusy(false);
+    setWorkspaceActionError("");
+    setPendingWorkspaceAction({ intent: "switch", snapshot: nextSnapshot });
+  }, [setSnapshot]);
+
+  const requestTrayQuit = useCallback(() => {
+    const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    if (!dirtyTabs.length) {
+      void quitApplication();
+      return;
+    }
+    setPendingCloseKey("");
+    setCloseError("");
+    setWorkspaceActionBusy(false);
+    setWorkspaceActionError("");
+    setPendingWorkspaceAction({ intent: "quit" });
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen("atria://quit-requested", requestTrayQuit).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [requestTrayQuit]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void getCurrentWindow().onCloseRequested((event) => {
+      if (allowNativeCloseRef.current) return;
+      const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+      if (!dirtyTabs.length) return;
+      event.preventDefault();
+      setPendingCloseKey("");
+      setCloseError("");
+      setWorkspaceActionBusy(false);
+      setWorkspaceActionError("");
+      setPendingWorkspaceAction({ intent: "close" });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     function handleTabShortcuts(event: KeyboardEvent) {
       if (!event.ctrlKey || event.altKey || !tabs.length) return;
       if (event.key.toLowerCase() === "w") {
         event.preventDefault();
-        if (activeTabKey) closeTab(activeTabKey);
+        if (activeTabKey) requestCloseTab(activeTabKey);
         return;
       }
       if (event.key === "Tab") {
@@ -118,7 +237,7 @@ export function App() {
     }
     window.addEventListener("keydown", handleTabShortcuts);
     return () => window.removeEventListener("keydown", handleTabShortcuts);
-  }, [activeTabKey, closeTab, openNode, tabs]);
+  }, [activeTabKey, openNode, requestCloseTab, tabs]);
 
   const activeTab = getActiveTab({ activeTabKey, tabs });
   const activePage =
@@ -129,6 +248,7 @@ export function App() {
       : undefined;
   const activeAsset =
     activeTab?.type === "asset" ? snapshot?.assets.find((asset) => asset.id === activeTab.id) : undefined;
+  const pendingCloseTab = tabs.find((tab) => tab.key === pendingCloseKey);
   const historyTarget: HistoryTarget | undefined = activePage?.filePath
     ? {
         id: activePage.id,
@@ -144,6 +264,14 @@ export function App() {
           kind: "html-artifact",
         }
       : undefined;
+
+  if (query.isPending && !snapshot) {
+    return <WorkspaceStartupState mode="loading" />;
+  }
+
+  if (query.isError && !snapshot) {
+    return <WorkspaceStartupState mode="error" onRetry={() => void query.refetch()} />;
+  }
 
   return (
     <div className={styles.shell}>
@@ -184,19 +312,37 @@ export function App() {
       </aside>
 
       <main className={styles.mainPane}>
-        <div className={styles.tabs}>
+        <div className={styles.tabs} role="tablist" aria-label="Open files">
           {tabs.map((tab) => (
             <div
               key={tab.key}
+              ref={(element) => {
+                if (element) tabElementsRef.current.set(tab.key, element);
+                else tabElementsRef.current.delete(tab.key);
+              }}
               className={tab.key === activeTabKey ? styles.tabActive : styles.tab}
               onAuxClick={(event) => {
-                if (event.button === 1) closeTab(tab.key);
+                if (event.button === 1) requestCloseTab(tab.key);
               }}
             >
-              <button className={styles.tabLabel} onClick={() => openNode(tab.type, tab.id)}>
+              <button
+                className={styles.tabLabel}
+                role="tab"
+                aria-selected={tab.key === activeTabKey}
+                tabIndex={tab.key === activeTabKey ? 0 : -1}
+                onClick={() => openNode(tab.type, tab.id)}
+              >
                 <span>{tab.title}</span>
+                {tab.dirty && (
+                  <i
+                    className={styles.tabDirtyIndicator}
+                    data-dirty="true"
+                    aria-label="Unsaved changes"
+                    title="Unsaved changes"
+                  />
+                )}
               </button>
-              <button className={styles.tabClose} onClick={() => closeTab(tab.key)} title="Close">
+              <button className={styles.tabClose} onClick={() => requestCloseTab(tab.key)} aria-label={`Close ${tab.title}`} title="Close">
                 <X size={14} />
               </button>
             </div>
@@ -206,7 +352,7 @@ export function App() {
         <section className={styles.documentSurface}>
           <Suspense fallback={<div className={styles.viewLoading} aria-busy="true" />}>
             {activeTool === "settings" && snapshot ? (
-              <WorkspaceSettingsView snapshot={snapshot} onLoaded={setSnapshot} />
+              <WorkspaceSettingsView snapshot={snapshot} onWorkspaceChangeRequested={requestWorkspaceChange} />
             ) : activeTool === "history" && historyTarget && snapshot ? (
               <DocumentHistoryView
                 snapshot={snapshot}
@@ -214,7 +360,7 @@ export function App() {
                 onRestored={async () => setSnapshot(await loadWorkspace(snapshot.settings.workspacePath))}
               />
             ) : activePage ? (
-              <PageEditor page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
+              <PageEditor key={activePage.id} page={activePage} artifacts={snapshot?.artifacts ?? []} snapshot={snapshot} />
             ) : activeArtifact ? (
               <ArtifactPreview artifact={activeArtifact} snapshot={snapshot} />
             ) : activeAsset && snapshot ? (
@@ -265,8 +411,107 @@ export function App() {
           })}
         </div>
       </aside>
+
+      {pendingCloseTab && (
+        <UnsavedChangesDialog
+          tab={pendingCloseTab}
+          busy={closeBusy}
+          error={closeError}
+          onCancel={() => {
+            if (closeBusy) return;
+            setPendingCloseKey("");
+            setCloseError("");
+          }}
+          onDiscard={() => {
+            if (closeBusy) return;
+            const key = pendingCloseTab.key;
+            setPendingCloseKey("");
+            setCloseError("");
+            closeTab(key);
+          }}
+          onSave={() => void saveAndClose(pendingCloseTab.key)}
+        />
+      )}
+      {pendingWorkspaceAction && (
+        <UnsavedWorkspaceDialog
+          tabs={tabs.filter((tab) => tab.dirty)}
+          intent={pendingWorkspaceAction.intent}
+          busy={workspaceActionBusy}
+          error={workspaceActionError}
+          onCancel={() => {
+            if (workspaceActionBusy) return;
+            setPendingWorkspaceAction(undefined);
+            setWorkspaceActionError("");
+          }}
+          onDiscardAll={() => void discardAllAndContinue()}
+          onSaveAll={() => void saveAllAndContinue()}
+        />
+      )}
     </div>
   );
+
+  async function saveAndClose(key: string) {
+    if (closeBusy) return;
+    setCloseBusy(true);
+    setCloseError("");
+    const result = await saveSourceDraft(key);
+    if (result.status === "saved" && !useAtriaStore.getState().tabs.find((tab) => tab.key === key)?.dirty) {
+      setPendingCloseKey("");
+      setCloseBusy(false);
+      closeTab(key);
+      return;
+    }
+    setCloseBusy(false);
+    setCloseError(result.status === "saved" ? "The draft changed while it was being saved. Save it again to close." : result.message);
+  }
+
+  async function saveAllAndContinue() {
+    if (workspaceActionBusy || !pendingWorkspaceAction) return;
+    setWorkspaceActionBusy(true);
+    setWorkspaceActionError("");
+    const dirtyTabs = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    for (const tab of dirtyTabs) {
+      const result = await saveSourceDraft(tab.key);
+      if (result.status !== "saved") {
+        setWorkspaceActionBusy(false);
+        setWorkspaceActionError(`Could not save ${tab.title}. ${result.message}`);
+        return;
+      }
+    }
+    const remaining = useAtriaStore.getState().tabs.filter((tab) => tab.dirty);
+    if (remaining.length) {
+      setWorkspaceActionBusy(false);
+      setWorkspaceActionError("Some files changed while they were being saved. Save all again to continue.");
+      return;
+    }
+    await continueWorkspaceAction();
+  }
+
+  async function discardAllAndContinue() {
+    if (workspaceActionBusy || !pendingWorkspaceAction) return;
+    setWorkspaceActionBusy(true);
+    setWorkspaceActionError("");
+    useAtriaStore.getState().tabs.filter((tab) => tab.dirty).forEach((tab) => clearSourceDraft(tab.key));
+    await continueWorkspaceAction();
+  }
+
+  async function continueWorkspaceAction() {
+    const action = pendingWorkspaceAction;
+    if (!action) return;
+    if (action.intent === "switch") {
+      setActiveWorkspacePath(action.snapshot.settings.workspacePath);
+      setSnapshot(action.snapshot);
+      setPendingWorkspaceAction(undefined);
+      setWorkspaceActionBusy(false);
+      return;
+    }
+    if (action.intent === "quit") {
+      await quitApplication();
+      return;
+    }
+    allowNativeCloseRef.current = true;
+    await getCurrentWindow().close();
+  }
 
   function renderSidePane(current: WorkspaceSnapshot) {
     if (activeTool === "files") {
@@ -316,7 +561,7 @@ function HistoryPane({ target }: { target?: HistoryTarget }) {
           <HistoryIcon size={16} />
           <span>
             <strong>{target.title}</strong>
-            <small>{target.path}</small>
+            <small>{target.kind === "html-artifact" ? "HTML result history" : "Document history"}</small>
           </span>
         </div>
       )}
@@ -389,6 +634,19 @@ function SearchPane() {
             </button>
           )}
         </label>
+        {query && contentQuery.isError && (
+          <div className={styles.searchError} role="alert">
+            <AlertCircle size={15} />
+            <span>
+              <strong>Content search unavailable</strong>
+              <small>File names and tags are still shown.</small>
+            </span>
+            <button type="button" onClick={() => void contentQuery.refetch()}>
+              <RefreshCw size={13} />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
         {!query && recent.length > 0 && (
           <div className={styles.searchGroup}>
             <div className={styles.searchGroupLabel}>Recent</div>
@@ -429,41 +687,35 @@ function SearchPane() {
   );
 }
 
-function normalizeWorkspacePath(path: string): string {
-  return path.replace(/\\/g, "/").toLowerCase();
+function WorkspaceStartupState({ mode, onRetry }: { mode: "loading" | "error"; onRetry?: () => void }) {
+  if (mode === "loading") {
+    return (
+      <main className={styles.workspaceStartup} role="status" aria-live="polite">
+        <LoaderCircle className={styles.spin} size={19} />
+        <span>
+          <strong>Opening Atria</strong>
+          <small>Loading the local Workspace</small>
+        </span>
+      </main>
+    );
+  }
+  return (
+    <main className={styles.workspaceStartup} role="alert">
+      <AlertCircle size={20} />
+      <span>
+        <strong>Workspace could not be opened</strong>
+        <small>Check that the folder is available, then try again.</small>
+      </span>
+      <button type="button" onClick={onRetry}>
+        <RefreshCw size={14} />
+        <span>Try again</span>
+      </button>
+    </main>
+  );
 }
 
-function TagsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
-  const tags = Array.from(
-    [...snapshot.pages, ...snapshot.artifacts].reduce((map, item) => {
-      for (const tag of item.tags ?? []) map.set(tag, (map.get(tag) ?? 0) + 1);
-      return map;
-    }, new Map<string, number>()),
-  ).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-
-  return (
-    <>
-      <div className={styles.sideTitle}>
-        <strong>Tags</strong>
-        <span>{tags.length} tags</span>
-      </div>
-      <div className={styles.tagList}>
-        {tags.map(([tag, count]) => (
-          <button
-            key={tag}
-            onClick={() => {
-              useAtriaStore.getState().setFilter(tag);
-              useAtriaStore.getState().setActiveTool("search");
-            }}
-          >
-            <Hash size={13} />
-            <span>{tag}</span>
-            <small>{count}</small>
-          </button>
-        ))}
-      </div>
-    </>
-  );
+function normalizeWorkspacePath(path: string): string {
+  return path.replace(/\\/g, "/").toLowerCase();
 }
 
 function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
@@ -489,6 +741,19 @@ function SettingsPane({ snapshot }: { snapshot: WorkspaceSnapshot }) {
       </div>
     </>
   );
+}
+
+async function loadInitialWorkspace(): Promise<WorkspaceSnapshot> {
+  const preferredPath = readActiveWorkspacePath();
+  if (preferredPath) {
+    try {
+      const status = await getWorkspaceDirectoryStatus(preferredPath);
+      if (status.exists && status.directory) return await loadWorkspace(preferredPath);
+    } catch {
+      // The default workspace remains available when a remembered location cannot be inspected.
+    }
+  }
+  return loadWorkspace();
 }
 
 function dispatchInsert(type: AtriaBlockType | "drawing"): void {

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+#[allow(dead_code)]
 #[path = "../git_history.rs"]
 mod git_history;
 #[path = "../mcp_protocol.rs"]
@@ -38,18 +39,34 @@ pub fn safe_join(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
 }
 
 fn main() {
-  if let Err(error) = mcp_protocol::run(resolve_workspace_argument()) {
+  let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+  if arguments.iter().any(|argument| argument == "--version" || argument == "-V") {
+    println!("atria-mcp {}", env!("CARGO_PKG_VERSION"));
+    return;
+  }
+  if let Err(error) = mcp_protocol::run(resolve_workspace_argument(&arguments)) {
     eprintln!("Atria MCP stopped: {error}");
     std::process::exit(1);
   }
 }
 
-fn resolve_workspace_argument() -> Option<String> {
-  let mut arguments = std::env::args().skip(1);
+fn resolve_workspace_argument(arguments: &[String]) -> Option<String> {
+  let mut arguments = arguments.iter();
   while let Some(argument) = arguments.next() {
     if argument == "--workspace" {
-      return arguments.next();
+      return arguments.next().cloned();
     }
   }
   std::env::var("ATRIA_WORKSPACE").ok()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::resolve_workspace_argument;
+
+  #[test]
+  fn resolves_an_explicit_workspace_argument() {
+    let arguments = vec!["--workspace".to_string(), "D:\\Atria".to_string()];
+    assert_eq!(resolve_workspace_argument(&arguments).as_deref(), Some("D:\\Atria"));
+  }
 }

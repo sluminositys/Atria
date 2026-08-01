@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Color from "@tiptap/extension-color";
@@ -17,6 +17,7 @@ import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@t
 import { Selection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { createLowlight } from "lowlight";
+import { Check, Code2, Eye, RotateCcw, Save } from "lucide-react";
 import bash from "highlight.js/lib/languages/bash";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
@@ -33,6 +34,7 @@ import { ArtifactPicker } from "./ArtifactPicker";
 import { EditorContextMenu, type ContextMenuState } from "./EditorContextMenu";
 import { EditorToolbar } from "./EditorToolbar";
 import { ImageInsertDialog } from "./ImageInsertDialog";
+import { LinkEditorPopover, type LinkEditorState } from "./LinkEditorPopover";
 import { TableInsertDialog } from "./TableInsertDialog";
 import { SelectionBubbleMenu } from "./SelectionBubbleMenu";
 import {
@@ -61,18 +63,30 @@ import { StableNodeId } from "./extensions/StableNodeId";
 import { TrailingParagraph } from "./extensions/TrailingParagraph";
 import { DrawingNodeView } from "./nodes/DrawingNodeView";
 import { insertBlockAtSelection } from "./commands/selectionCommands";
+import { validateDocumentBodySource } from "./documentSource";
+import { imageFileValidationError, readImageFileAsDataUrl } from "./imageFiles";
+import { defaultHtmlSource } from "./htmlPreview";
+import { createTimelineItem, parseTimelineItems } from "./timelineItems";
+import { resolveWorkspaceReference } from "./workspaceReferences";
 import styles from "../../app/App.module.css";
+
+const HtmlSourceEditor = lazy(() =>
+  import("./HtmlSourceEditor").then((module) => ({ default: module.HtmlSourceEditor })),
+);
 
 interface AtriaDocumentEditorProps {
   value?: AtriaDocumentContent | string;
   artifacts: Artifact[];
   snapshot?: WorkspaceSnapshot;
+  documentFilePath?: string;
   onChange(content: AtriaDocumentContent, html: string): void;
 }
 
 interface SlashState extends SlashMenuState {
   range: { from: number; to: number };
 }
+
+type DocumentEditorMode = "visual" | "source";
 
 const lowlight = createLowlight();
 lowlight.register({
@@ -123,13 +137,19 @@ const tableCellStyleAttributes = {
   },
 };
 
-export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: AtriaDocumentEditorProps) {
+export function AtriaDocumentEditor({ value, artifacts, snapshot, documentFilePath, onChange }: AtriaDocumentEditorProps) {
   const editorRef = useRef<Editor | null>(null);
   const [artifactPickerOpen, setArtifactPickerOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
   const [imageInsertError, setImageInsertError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [linkEditor, setLinkEditor] = useState<LinkEditorState | null>(null);
+  const [mode, setMode] = useState<DocumentEditorMode>("visual");
+  const [sourceDraft, setSourceDraft] = useState("");
+  const [sourceBaseline, setSourceBaseline] = useState("");
+  const [sourceError, setSourceError] = useState("");
+  const [sourceSaved, setSourceSaved] = useState(false);
   const [slash, setSlash] = useState<SlashState | null>(null);
   const slashRef = useRef<SlashState | null>(null);
 
@@ -138,7 +158,10 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     () => (workspacePath ? ({ settings: { workspacePath } } as WorkspaceSnapshot) : undefined),
     [workspacePath],
   );
-  const extensions = useMemo(() => createExtensions(artifacts, assetSnapshot), [artifacts, assetSnapshot]);
+  const extensions = useMemo(
+    () => createExtensions(artifacts, assetSnapshot, documentFilePath),
+    [artifacts, assetSnapshot, documentFilePath],
+  );
   const editor = useEditor(
     {
       extensions,
@@ -220,9 +243,13 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
             view.focus();
             return true;
           },
-          contextmenu(_view, event) {
+          contextmenu(view, event) {
             event.preventDefault();
             setSlash(null);
+            const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            if (hit && !(view.state.selection.from <= hit.pos && hit.pos <= view.state.selection.to)) {
+              view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(hit.pos))));
+            }
             setContextMenu({ x: event.clientX, y: event.clientY });
             return true;
           },
@@ -274,7 +301,101 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
     return () => window.removeEventListener("click", closeMenus);
   }, []);
 
+  const closeLinkEditor = useCallback(() => setLinkEditor(null), []);
+
   if (!editor) return null;
+
+  function openLinkEditor() {
+    const current = editorRef.current;
+    if (!current || current.state.selection.empty) return;
+    const { from, to } = current.state.selection;
+    const start = current.view.coordsAtPos(from);
+    const end = current.view.coordsAtPos(to);
+    const width = Math.min(330, window.innerWidth - 24);
+    const estimatedHeight = 126;
+    const centeredLeft = (start.left + end.right - width) / 2;
+    const x = clamp(centeredLeft, 12, window.innerWidth - width - 12);
+    const above = start.top - estimatedHeight - 10;
+    const y = above >= 12
+      ? above
+      : clamp(end.bottom + 10, 12, window.innerHeight - estimatedHeight - 12);
+    setContextMenu(null);
+    setSlashState(null);
+    setLinkEditor({
+      from,
+      to,
+      x,
+      y,
+      href: (current.getAttributes("link").href as string | undefined) ?? "",
+    });
+  }
+
+  function selectEditorMode(nextMode: DocumentEditorMode) {
+    if (nextMode === mode) return;
+    if (nextMode === "source") {
+      const current = editorRef.current;
+      if (!current) return;
+      const source = current.getHTML();
+      setContextMenu(null);
+      setSlashState(null);
+      setLinkEditor(null);
+      setSourceDraft(source);
+      setSourceBaseline(source);
+      setSourceError("");
+      setSourceSaved(false);
+      setMode("source");
+      return;
+    }
+    if (sourceDraft !== sourceBaseline) {
+      applySource(true);
+      return;
+    }
+    setMode("visual");
+  }
+
+  function applySource(returnToVisual = false): boolean {
+    const current = editorRef.current;
+    if (!current) {
+      setSourceError("The document editor is not ready.");
+      return false;
+    }
+    const validationError = validateDocumentBodySource(sourceDraft);
+    if (validationError) {
+      setSourceError(validationError);
+      setSourceSaved(false);
+      return false;
+    }
+    try {
+      const applied = current.commands.setContent(
+        sourceDraft.trim() || "<p></p>",
+        true,
+        { preserveWhitespace: "full" },
+      );
+      if (!applied) throw new Error("The editor could not parse this document body.");
+      const normalized = current.getHTML();
+      setSourceDraft(normalized);
+      setSourceBaseline(normalized);
+      setSourceError("");
+      setSourceSaved(true);
+      window.setTimeout(() => setSourceSaved(false), 1200);
+      if (returnToVisual) setMode("visual");
+      return true;
+    } catch (reason) {
+      setSourceError(reason instanceof Error ? reason.message : "The document body is not valid HTML.");
+      setSourceSaved(false);
+      return false;
+    }
+  }
+
+  function discardSource() {
+    const current = editorRef.current;
+    if (!current) return;
+    const source = current.getHTML();
+    setSourceDraft(source);
+    setSourceBaseline(source);
+    setSourceError("");
+    setSourceSaved(false);
+  }
 
   async function insertImageFile(file: File): Promise<boolean> {
     const currentEditor = editorRef.current;
@@ -284,7 +405,9 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       if (!snapshot?.settings.workspacePath) {
         throw new Error("Open or create a workspace before inserting a local image.");
       }
-      const dataUrl = await readFileAsDataUrl(file);
+      const validationError = imageFileValidationError(file);
+      if (validationError) throw new Error(validationError);
+      const dataUrl = await readImageFileAsDataUrl(file);
       const src = await importImageDataUrl(snapshot, dataUrl);
       return insertImage(src, file.name);
     } catch (error) {
@@ -473,8 +596,8 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
       case "custom-html":
       case "html":
         insertBlockAtSelection(current, {
-            type: "atriaHtml",
-            attrs: { html: "<section></section>", width: 820, height: 320, layout: "wide", align: "center" },
+          type: "atriaHtml",
+            attrs: { html: defaultHtmlSource, width: 820, height: 320, layout: "wide", align: "center" },
           });
         return;
       case "drawing":
@@ -484,7 +607,16 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
           });
         return;
       case "timeline":
-        insertBlockAtSelection(current, { type: "atriaTimeline", attrs: { items: [], width: 760, layout: "wide", align: "left" } });
+        insertBlockAtSelection(current, {
+          type: "atriaTimeline",
+          attrs: {
+            title: "Timeline",
+            items: [createTimelineItem({ at: "Date", title: "New event" })],
+            width: 760,
+            layout: "wide",
+            align: "left",
+          },
+        });
         return;
       case "metric-card":
         insertBlockAtSelection(current, {
@@ -499,9 +631,76 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
 
   return (
     <div className={styles.documentEditor}>
-      <EditorToolbar editor={editor} onInsert={insertFromPalette} />
-      <SelectionBubbleMenu editor={editor} />
-      <EditorContent editor={editor} />
+      <div className={styles.documentModeBar} contentEditable={false}>
+        <div className={styles.segmentedControl} aria-label="Document view">
+          <button
+            className={mode === "visual" ? styles.segmentedControlActive : undefined}
+            aria-pressed={mode === "visual"}
+            onClick={() => selectEditorMode("visual")}
+          >
+            <Eye size={14} />
+            <span>Visual</span>
+          </button>
+          <button
+            className={mode === "source" ? styles.segmentedControlActive : undefined}
+            aria-pressed={mode === "source"}
+            onClick={() => selectEditorMode("source")}
+          >
+            <Code2 size={14} />
+            <span>Source</span>
+          </button>
+        </div>
+        {mode === "source" && (
+          <div className={styles.documentSourceActions}>
+            <button
+              type="button"
+              title="Discard source changes"
+              aria-label="Discard source changes"
+              disabled={sourceDraft === sourceBaseline}
+              onClick={discardSource}
+            >
+              <RotateCcw size={14} />
+            </button>
+            <button
+              type="button"
+              className={styles.documentSourceApply}
+              disabled={sourceDraft === sourceBaseline}
+              onClick={() => applySource(false)}
+            >
+              {sourceSaved ? <Check size={14} /> : <Save size={14} />}
+              <span>{sourceSaved ? "Applied" : "Apply"}</span>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className={mode === "visual" ? styles.documentToolbarSurface : styles.documentToolbarSurfaceHidden}>
+        <EditorToolbar editor={editor} onInsert={insertFromPalette} onEditLink={openLinkEditor} />
+      </div>
+      <SelectionBubbleMenu editor={editor} onEditLink={openLinkEditor} />
+      <div className={mode === "visual" ? styles.documentVisualSurface : styles.documentVisualSurfaceHidden}>
+        <EditorContent editor={editor} />
+      </div>
+      <div className={mode === "source" ? styles.documentSourcePane : styles.documentSourcePaneHidden}>
+        {mode === "source" && (
+          <>
+          {sourceError && <div className={styles.documentSourceError} role="alert">{sourceError}</div>}
+          <Suspense fallback={<div className={styles.documentSourceLoading}>Loading source editor...</div>}>
+            <HtmlSourceEditor
+              value={sourceDraft}
+              ariaLabel="Document body HTML source"
+              autoFocus
+              onChange={(source) => {
+                setSourceDraft(source);
+                setSourceError("");
+                setSourceSaved(false);
+              }}
+              onSave={() => applySource(false)}
+            />
+          </Suspense>
+          </>
+        )}
+      </div>
+      <LinkEditorPopover editor={editor} state={linkEditor} onClose={closeLinkEditor} />
       {imageInsertError && (
         <div className={styles.editorToast} contentEditable={false}>
           <span>{imageInsertError}</span>
@@ -556,7 +755,7 @@ export function AtriaDocumentEditor({ value, artifacts, snapshot, onChange }: At
   );
 }
 
-function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
+function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot, documentFilePath?: string) {
   return [
     StableNodeId,
     TrailingParagraph,
@@ -568,7 +767,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
       placeholder: "Write, paste, or type / to insert...",
     }),
     Link.configure({
-      openOnClick: true,
+      openOnClick: false,
       autolink: true,
       linkOnPaste: true,
     }),
@@ -648,7 +847,7 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     }).configure({ lowlight }),
     createCardNode(),
     createCalloutNode(),
-    createImageNode(snapshot),
+    createImageNode(snapshot, documentFilePath),
     createArtifactNode(artifacts, snapshot),
     createMermaidNode(),
     createInlineMathNode(),
@@ -659,6 +858,10 @@ function createExtensions(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
     createTimelineNode(),
     createLegacyNode(),
   ];
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 }
 
 const layoutAttributes = {
@@ -752,7 +955,7 @@ function createCalloutNode() {
   });
 }
 
-function createImageNode(snapshot?: WorkspaceSnapshot) {
+function createImageNode(snapshot?: WorkspaceSnapshot, documentFilePath?: string) {
   return Node.create({
     name: "atriaImage",
     group: "block",
@@ -760,24 +963,88 @@ function createImageNode(snapshot?: WorkspaceSnapshot) {
     draggable: true,
     addAttributes() {
       return {
-        src: { default: "" },
-        caption: { default: "" },
-        alt: { default: "" },
-        width: { default: 640 },
-        height: { default: null },
+        src: {
+          default: "",
+          parseHTML: (element: HTMLElement) => {
+            const storedSource = element.getAttribute("data-src");
+            if (storedSource) return storedSource;
+            const source = imageElement(element).getAttribute("src") ?? "";
+            return element.matches("img")
+              ? resolveWorkspaceReference(source, documentFilePath)
+              : source;
+          },
+          renderHTML: (attributes: Record<string, unknown>) => attributes.src ? { "data-src": attributes.src } : {},
+        },
+        caption: {
+          default: "",
+          parseHTML: (element: HTMLElement) =>
+            element.matches("figure")
+              ? (element.querySelector("figcaption")?.textContent?.trim() ?? "")
+              : (element.getAttribute("title") ?? ""),
+          renderHTML: () => ({}),
+        },
+        alt: {
+          default: "",
+          parseHTML: (element: HTMLElement) => imageElement(element).getAttribute("alt") ?? "",
+          renderHTML: () => ({}),
+        },
+        width: {
+          default: 640,
+          parseHTML: (element: HTMLElement) => imageDimension(imageElement(element), "width") ?? 640,
+          renderHTML: (attributes: Record<string, unknown>) => attributes.width ? { "data-width": attributes.width } : {},
+        },
+        height: {
+          default: null,
+          parseHTML: (element: HTMLElement) => imageDimension(imageElement(element), "height"),
+          renderHTML: (attributes: Record<string, unknown>) => attributes.height ? { "data-height": attributes.height } : {},
+        },
         ...layoutAttributes,
       };
     },
     parseHTML() {
-      return [{ tag: 'figure[data-atria-node="image"]' }];
+      return [
+        { tag: 'figure[data-atria-node="image"]' },
+        { tag: "img[src]" },
+      ];
     },
-    renderHTML({ HTMLAttributes }) {
-      return ["figure", mergeAttributes(HTMLAttributes, { "data-atria-node": "image" })];
+    renderHTML({ HTMLAttributes, node }) {
+      const src = String(node.attrs.src ?? "");
+      const alt = String(node.attrs.alt ?? "");
+      const caption = String(node.attrs.caption ?? "");
+      const width = imageDimensionValue(node.attrs.width);
+      const height = imageDimensionValue(node.attrs.height);
+      return [
+        "figure",
+        mergeAttributes(HTMLAttributes, { "data-atria-node": "image" }),
+        [
+          "img",
+          {
+            src,
+            alt,
+            ...(width ? { width: String(width) } : {}),
+            ...(height ? { height: String(height) } : {}),
+          },
+        ],
+        ...(caption ? [["figcaption", {}, caption] as const] : []),
+      ];
     },
     addNodeView() {
       return ReactNodeViewRenderer((props) => <ImageNodeView {...props} snapshot={snapshot} />);
     },
   });
+}
+
+function imageElement(element: HTMLElement): HTMLElement {
+  return element.matches("img") ? element : (element.querySelector("img") as HTMLElement | null) ?? element;
+}
+
+function imageDimension(element: HTMLElement, name: "width" | "height"): number | null {
+  return imageDimensionValue(element.getAttribute(name) ?? element.style[name]);
+}
+
+function imageDimensionValue(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
 }
 
 function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot) {
@@ -791,6 +1058,7 @@ function createArtifactNode(artifacts: Artifact[], snapshot?: WorkspaceSnapshot)
         artifactId: { default: "" },
         width: { default: 820 },
         height: { default: 420 },
+        expandedHeight: { default: 420 },
         collapsed: { default: false },
         note: { default: "" },
         ...layoutAttributes,
@@ -918,7 +1186,7 @@ function createHtmlNode() {
     draggable: true,
     addAttributes() {
       return {
-        html: { default: "<section></section>" },
+        html: { default: defaultHtmlSource },
         width: { default: 820 },
         height: { default: 320 },
         ...layoutAttributes,
@@ -1007,7 +1275,12 @@ function createTimelineNode() {
     draggable: true,
     addAttributes() {
       return {
-        items: { default: [] },
+        title: { default: "Timeline" },
+        items: {
+          default: [],
+          parseHTML: (element: HTMLElement) => parseTimelineItems(element.getAttribute("data-items") ?? element.getAttribute("items")),
+          renderHTML: (attrs: Record<string, unknown>) => ({ "data-items": JSON.stringify(parseTimelineItems(attrs.items)) }),
+        },
         width: { default: 760 },
         height: { default: null },
         ...layoutAttributes,
@@ -1049,17 +1322,5 @@ function createLegacyNode() {
     addNodeView() {
       return ReactNodeViewRenderer(LegacyNodeView);
     },
-  });
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("Failed to read image"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
-    reader.readAsDataURL(file);
   });
 }
